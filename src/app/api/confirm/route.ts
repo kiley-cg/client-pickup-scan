@@ -1,10 +1,20 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { verifyToken } from '@/lib/token/hmac'
-import { addJobLog, checkPickupState, getJob, PICKUP_SENTINEL } from '@/lib/syncore/client'
+import { getJob } from '@/lib/syncore/client'
+import { addTrackerEntry } from '@/lib/syncore/webui'
+import { getPickup, recordPickup } from '@/lib/pickup-store'
 import { sendPickupEmail } from '@/lib/email/smtp'
 
 const Body = z.object({ token: z.string().min(1) })
+
+function formatWhen(d: Date): string {
+  return d.toLocaleString('en-US', {
+    timeZone: 'America/Los_Angeles',
+    dateStyle: 'medium',
+    timeStyle: 'short'
+  })
+}
 
 export async function POST(req: Request) {
   const parsed = Body.safeParse(await req.json().catch(() => ({})))
@@ -20,32 +30,22 @@ export async function POST(req: Request) {
   }
 
   try {
-    const existing = await checkPickupState(jobId)
-    if (existing.alreadyPickedUp) {
-      return NextResponse.json({ ok: true, alreadyPickedUp: true, at: existing.at })
+    const existing = await getPickup(jobId)
+    if (existing) {
+      return NextResponse.json({ ok: true, alreadyPickedUp: true, at: existing.pickedUpAt })
     }
 
     const job = await getJob(jobId)
     const pickedUpAt = new Date()
-    const when = pickedUpAt.toLocaleString('en-US', {
-      timeZone: 'America/Los_Angeles',
-      dateStyle: 'medium',
-      timeStyle: 'short'
-    })
+    const description = `Picked up by customer on ${formatWhen(pickedUpAt)}`
 
-    const logDescription = [
-      `${PICKUP_SENTINEL} Picked up by customer on ${when}`,
-      `ISO: ${pickedUpAt.toISOString()}`
-    ].join('\n')
-
-    await addJobLog(jobId, logDescription)
+    await addTrackerEntry(jobId, description, { textColor: 1 })
+    await recordPickup(jobId, pickedUpAt)
 
     const emailResult = await sendPickupEmail({
       jobId,
       customer: job.customer,
       description: job.description,
-      repName: job.repName,
-      repEmail: job.repEmail,
       pickedUpAt
     })
 

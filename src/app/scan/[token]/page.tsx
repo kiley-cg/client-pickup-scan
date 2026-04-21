@@ -1,6 +1,7 @@
 import Image from 'next/image'
 import { verifyToken } from '@/lib/token/hmac'
-import { getJob, checkPickupState } from '@/lib/syncore/client'
+import { getJob } from '@/lib/syncore/client'
+import { getPickup } from '@/lib/pickup-store'
 import ConfirmButton from './ConfirmButton'
 
 export const dynamic = 'force-dynamic'
@@ -44,15 +45,15 @@ export default async function ScanPage({ params }: { params: Promise<{ token: st
     </ScanShell>
   }
 
-  const state = await checkPickupState(jobId).catch(() => null)
+  const existing = await getPickup(jobId).catch(() => null)
 
-  if (state?.alreadyPickedUp) {
+  if (existing) {
     return <ScanShell>
       <div style={{ textAlign: 'center' }}>
         <div style={{ fontSize: 56, marginBottom: 8 }}>✅</div>
         <h1 style={{ margin: '0 0 8px', fontSize: 24 }}>Already picked up</h1>
         <p style={{ color: 'var(--muted)', margin: '0 0 4px', fontSize: 15 }}>
-          This order was confirmed picked up on <strong style={{ color: 'var(--ink)' }}>{formatWhen(state.at)}</strong>.
+          This order was confirmed picked up on <strong style={{ color: 'var(--ink)' }}>{formatWhen(existing.pickedUpAt)}</strong>.
         </p>
         <JobCard jobId={jobId} customer={customer} description={description} />
       </div>

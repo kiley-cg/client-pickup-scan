@@ -1,5 +1,5 @@
 import nodemailer from 'nodemailer'
-import { env, parseRepEmailMap } from '@/lib/env'
+import { env } from '@/lib/env'
 
 let cachedTransporter: nodemailer.Transporter | null = null
 
@@ -15,23 +15,10 @@ function transporter() {
   return cachedTransporter
 }
 
-export function resolveRecipient(repEmail: string | null, repName: string | null): string | null {
-  if (repEmail) return repEmail
-  const map = parseRepEmailMap(env().REP_EMAIL_MAP)
-  if (repName) {
-    const hit = map[repName.toLowerCase()]
-    if (hit) return hit
-  }
-  const fallback = env().CSR_FALLBACK_EMAIL.trim()
-  return fallback || null
-}
-
 export interface PickupEmailInput {
   jobId: number
   customer: string
   description: string
-  repName: string | null
-  repEmail: string | null
   pickedUpAt: Date
 }
 
@@ -39,9 +26,9 @@ export async function sendPickupEmail(input: PickupEmailInput): Promise<{ sent: 
   if (!env().GMAIL_APP_PASSWORD) {
     return { sent: false, to: null, reason: 'GMAIL_APP_PASSWORD not configured — skipping email.' }
   }
-  const to = resolveRecipient(input.repEmail, input.repName)
+  const to = env().PICKUP_EMAIL_TO.trim()
   if (!to) {
-    return { sent: false, to: null, reason: 'No rep email resolved (no repEmail, no REP_EMAIL_MAP hit, no CSR_FALLBACK_EMAIL).' }
+    return { sent: false, to: null, reason: 'PICKUP_EMAIL_TO not configured.' }
   }
 
   const when = input.pickedUpAt.toLocaleString('en-US', {
@@ -58,7 +45,7 @@ export async function sendPickupEmail(input: PickupEmailInput): Promise<{ sent: 
     `Order: ${input.description || '(no description)'}`,
     `Picked up: ${when}`,
     ``,
-    `A "${/* sentinel hint */ 'CG-PICKUP::'}" entry has been added to the Syncore Job Log.`
+    `A "CG-PICKUP::" entry has been added to the Syncore Job Log.`
   ].join('\n')
 
   const html = `

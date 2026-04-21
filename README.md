@@ -26,14 +26,15 @@ Open http://localhost:3000 — you'll be redirected to `/login`.
 
 | Key | Notes |
 |---|---|
-| `SYNCORE_API_KEY` | Same value as CG-Dashboard / UPS-Shipping-Import |
+| `SYNCORE_API_KEY` | REST API key — used for job lookup. Same value as CG-Dashboard / UPS-Shipping-Import |
+| `SYNCORE_USERNAME` | Web-UI login for writing Job Tracker entries (no REST API exposed). Same creds UPS-Shipping-Import uses |
+| `SYNCORE_PASSWORD` | Password for the Syncore web login |
 | `PICKUP_HMAC_SECRET` | 32+ random bytes — generate with `openssl rand -base64 32` |
 | `GMAIL_USER` | `kiley@colorgraphicswa.com` |
 | `GMAIL_APP_PASSWORD` | Google app password (reuse the one from UPS-Shipping-Import or generate new at myaccount.google.com → Security → App passwords) |
 | `PUBLIC_BASE_URL` | URL the QR code will point to — `http://localhost:3000` for dev, `https://pickup.colorgraphicswa.com` in prod |
 | `ADMIN_PASSWORD` | Shared staff password protecting `/` and `/sticker/*` |
-| `REP_EMAIL_MAP` | Optional fallback. Comma-separated `Name=email` pairs, used only if Syncore doesn't return a rep email on the job |
-| `CSR_FALLBACK_EMAIL` | Optional — who to email when no rep email can be resolved |
+| `PICKUP_EMAIL_TO` | Where pickup-confirmation emails are sent (e.g. `csr@colorgraphicswa.com`). Comma-separate for multiple recipients |
 
 ---
 
@@ -67,39 +68,43 @@ sitting in the pickup area.
 2. Page shows the job number, customer name, and order description.
 3. Customer taps **Confirm pickup**. The `/api/confirm` route:
    - Verifies the HMAC token.
-   - Fetches the Syncore Job Log and checks for an existing `CG-PICKUP::`
-     entry. If found → returns `alreadyPickedUp: true` without side effects.
-   - Otherwise, appends a new log entry and emails the assigned rep.
+   - Checks a Netlify Blobs store for an existing pickup record for this job.
+     If found → returns `alreadyPickedUp: true` without side effects.
+   - Otherwise, appends a red Job Tracker entry to Syncore via the web-UI
+     endpoint, records the pickup in Blobs, and emails the CSR address.
 
 ---
 
 ## Syncore integration
 
-Calls live in [src/lib/syncore/client.ts](src/lib/syncore/client.ts). Base URL
-`https://api.syncore.app/v2`, auth via the `x-api-key` header — same pattern
-as [CG-Dashboard](../CG-Dashboard/src/lib/syncore/client.ts).
+Two separate integration surfaces:
+
+**REST API** (`src/lib/syncore/client.ts`) — for reading. Base URL
+`https://api.syncore.app/v2`, `x-api-key` header.
 
 | Purpose | Method | Path |
 |---|---|---|
-| Fetch job / customer / description | `GET` | `/orders/jobs/{id}/salesorders` |
-| Read Job Log (for idempotency) | `GET` | `/orders/jobs/{id}/logs` |
-| Append Job Log entry | `POST` | `/orders/jobs/{id}/logs` body `{ "description": "..." }` |
+| Fetch job / customer / description / rep | `GET` | `/orders/jobs/{id}` |
 
-The Job Log endpoints come from
-[kiley-cg/UPS-Shipping-Import/syncore_job_log_tools.py](https://github.com/kiley-cg/import/blob/main/syncore_job_log_tools.py).
+**Web-UI session** (`src/lib/syncore/webui.ts`) — for writing Job Tracker
+entries. Syncore does not expose a REST endpoint for the Job Tracker, so we
+log in to `https://www.ateasesystems.net/Account/Login` (matching the pattern
+used by UPS-Shipping-Import) and POST entries to
+`/Job/AddTrackerEntryAsync` with `{ JobId, TextColor, Description }`.
 
-### Assigned-rep email
+`TextColor: 1` renders the entry in red so staff can spot pickups quickly in
+the Job Tracker.
 
-The job's rep email may be stored under `sales_rep.email`, `rep.email`,
-`assigned_to.email`, or `user.email` — `getJob()` tries each in order. If none
-of them are present, the code falls back to `REP_EMAIL_MAP` (name → email) and
-then `CSR_FALLBACK_EMAIL`.
+The session cookie is cached in-process for 20 minutes — function cold starts
+re-log in, warm invocations reuse the session. On 401/HTML responses the
+cache is invalidated and a fresh login is attempted once.
 
-Check the actual shape once in dev: visit `/api/job/<jobId>` in a logged-in
-browser tab — the response includes `repEmail` and `repName` after the
-normalisation step. If those are null for real jobs, log the raw response in
-`getJob()` to find where the rep email actually lives, and update the field
-lookup.
+### Pickup email recipient
+
+All pickup-confirmation emails go to `PICKUP_EMAIL_TO` — typically a single
+CSR distribution list like `csr@colorgraphicswa.com`. Syncore's
+`primary_rep` and `customer_service_rep_name` are surfaced in the admin UI
+for context but are not used for routing the email.
 
 ---
 
