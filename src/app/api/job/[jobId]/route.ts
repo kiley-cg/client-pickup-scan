@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getJob } from '@/lib/syncore/client'
+import { getSalesOrderPickup } from '@/lib/pickup-store'
 import { isAdminFromRequest } from '@/lib/admin-auth'
 
 export async function GET(req: Request, { params }: { params: Promise<{ jobId: string }> }) {
@@ -15,12 +16,18 @@ export async function GET(req: Request, { params }: { params: Promise<{ jobId: s
 
   try {
     const job = await getJob(jobId)
+    const salesOrders = await Promise.all(
+      job.salesOrders.map(async so => {
+        const pickup = await getSalesOrderPickup(jobId, so.number).catch(() => null)
+        return { ...so, pickedUpAt: pickup?.pickedUpAt ?? null }
+      })
+    )
     return NextResponse.json({
       jobId: job.jobId,
       customer: job.customer,
       description: job.description,
       repName: job.repName,
-      salesOrders: job.salesOrders
+      salesOrders
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)

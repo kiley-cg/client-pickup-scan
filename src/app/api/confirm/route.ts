@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { verifyToken, tokenKey } from '@/lib/token/hmac'
 import { getJob } from '@/lib/syncore/client'
 import { addTrackerEntry } from '@/lib/syncore/webui'
-import { getPickupByKey, recordPickupByKey } from '@/lib/pickup-store'
+import { getPickupByKey, recordPickupByKey, recordSalesOrderPickup } from '@/lib/pickup-store'
 import { sendPickupEmail } from '@/lib/email/smtp'
 
 const Body = z.object({ token: z.string().min(1) })
@@ -49,11 +49,19 @@ export async function POST(req: Request) {
     const description = `Picked up by customer on ${formatWhen(pickedUpAt)} — ${formatSOs(jobId, soNumbers)}`
 
     await addTrackerEntry(jobId, description, { textColor: 1 })
+    const pickedUpAtIso = pickedUpAt.toISOString()
     await recordPickupByKey(blobKey, {
       jobId,
       soNumbers,
-      pickedUpAt: pickedUpAt.toISOString()
+      pickedUpAt: pickedUpAtIso,
+      customer: job.customer,
+      description: job.description
     })
+    await Promise.all(
+      soNumbers.map(soNumber =>
+        recordSalesOrderPickup({ jobId, soNumber, pickedUpAt: pickedUpAtIso, stickerKey: blobKey })
+      )
+    )
 
     const emailResult = await sendPickupEmail({
       jobId,

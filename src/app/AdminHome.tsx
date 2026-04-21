@@ -2,12 +2,24 @@
 
 import { useState, useTransition } from 'react'
 import Image from 'next/image'
+import Link from 'next/link'
 
 interface SalesOrder {
   id: number
   number: number
   status: string
   total: number
+  pickedUpAt: string | null
+}
+
+function formatPickupDate(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleString('en-US', {
+    timeZone: 'America/Los_Angeles',
+    dateStyle: 'medium',
+    timeStyle: 'short'
+  })
 }
 
 interface JobInfo {
@@ -48,11 +60,13 @@ export default function AdminHome() {
       setJob(data)
       setCustomer(data.customer)
       setDescription(data.description)
-      setSelectedSOs(new Set(data.salesOrders.map(so => so.number)))
+      // Default-select only SOs not yet picked up
+      setSelectedSOs(new Set(data.salesOrders.filter(so => !so.pickedUpAt).map(so => so.number)))
     })
   }
 
-  function toggleSO(number: number) {
+  function toggleSO(number: number, disabled: boolean) {
+    if (disabled) return
     setSelectedSOs(prev => {
       const next = new Set(prev)
       if (next.has(number)) next.delete(number)
@@ -90,6 +104,9 @@ export default function AdminHome() {
         <div>
           <h1 style={{ margin: 0, fontSize: 22 }}>Pickup Stickers</h1>
           <p style={{ margin: 0, color: 'var(--muted)', fontSize: 14 }}>Enter a job number to print a pickup sticker.</p>
+        </div>
+        <div style={{ marginLeft: 'auto' }}>
+          <Link href="/admin/pickups" className="btn-secondary">Recent pickups</Link>
         </div>
       </header>
 
@@ -133,7 +150,8 @@ export default function AdminHome() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {job.salesOrders.map(so => {
-                const checked = selectedSOs.has(so.number)
+                const disabled = !!so.pickedUpAt
+                const checked = selectedSOs.has(so.number) && !disabled
                 return (
                   <label
                     key={so.number}
@@ -144,20 +162,30 @@ export default function AdminHome() {
                       padding: '10px 14px',
                       border: `1px solid ${checked ? 'var(--red)' : 'var(--line)'}`,
                       borderRadius: 10,
-                      background: checked ? '#FEECEE' : '#fff',
-                      cursor: 'pointer',
-                      fontSize: 14
+                      background: disabled ? '#F3F3F3' : checked ? '#FEECEE' : '#fff',
+                      cursor: disabled ? 'not-allowed' : 'pointer',
+                      fontSize: 14,
+                      opacity: disabled ? 0.6 : 1
                     }}
                   >
                     <input
                       type="checkbox"
                       checked={checked}
-                      onChange={() => toggleSO(so.number)}
+                      disabled={disabled}
+                      onChange={() => toggleSO(so.number, disabled)}
                       style={{ width: 18, height: 18, accentColor: 'var(--red)' }}
                     />
                     <strong style={{ minWidth: 80 }}>#{job.jobId}-{so.number}</strong>
-                    <span style={{ color: 'var(--muted)', flex: 1 }}>{so.status}</span>
-                    <span style={{ color: 'var(--muted)' }}>${so.total.toFixed(2)}</span>
+                    {disabled ? (
+                      <span style={{ color: 'var(--muted)', flex: 1, fontSize: 13 }}>
+                        Picked up {so.pickedUpAt ? formatPickupDate(so.pickedUpAt) : ''}
+                      </span>
+                    ) : (
+                      <>
+                        <span style={{ color: 'var(--muted)', flex: 1 }}>{so.status}</span>
+                        <span style={{ color: 'var(--muted)' }}>${so.total.toFixed(2)}</span>
+                      </>
+                    )}
                   </label>
                 )
               })}
