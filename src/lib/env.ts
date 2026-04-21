@@ -4,7 +4,7 @@ const EnvSchema = z.object({
   SYNCORE_API_KEY: z.string().min(1),
   PICKUP_HMAC_SECRET: z.string().min(16),
   GMAIL_USER: z.string().email(),
-  GMAIL_APP_PASSWORD: z.string().min(1),
+  GMAIL_APP_PASSWORD: z.string().optional().default(''),
   PUBLIC_BASE_URL: z.string().url(),
   ADMIN_PASSWORD: z.string().min(1),
   REP_EMAIL_MAP: z.string().optional().default(''),

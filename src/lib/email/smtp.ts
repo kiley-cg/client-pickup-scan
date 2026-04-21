@@ -36,6 +36,9 @@ export interface PickupEmailInput {
 }
 
 export async function sendPickupEmail(input: PickupEmailInput): Promise<{ sent: boolean; to: string | null; reason?: string }> {
+  if (!env().GMAIL_APP_PASSWORD) {
+    return { sent: false, to: null, reason: 'GMAIL_APP_PASSWORD not configured — skipping email.' }
+  }
   const to = resolveRecipient(input.repEmail, input.repName)
   if (!to) {
     return { sent: false, to: null, reason: 'No rep email resolved (no repEmail, no REP_EMAIL_MAP hit, no CSR_FALLBACK_EMAIL).' }
