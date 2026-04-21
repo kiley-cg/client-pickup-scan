@@ -3,12 +3,19 @@
 import { useState, useTransition } from 'react'
 import Image from 'next/image'
 
+interface SalesOrder {
+  id: number
+  number: number
+  status: string
+  total: number
+}
+
 interface JobInfo {
   jobId: number
   customer: string
   description: string
   repName: string | null
-  repEmail: string | null
+  salesOrders: SalesOrder[]
 }
 
 export default function AdminHome() {
@@ -17,6 +24,7 @@ export default function AdminHome() {
   const [customer, setCustomer] = useState('')
   const [description, setDescription] = useState('')
   const [boxes, setBoxes] = useState(1)
+  const [selectedSOs, setSelectedSOs] = useState<Set<number>>(new Set())
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
 
@@ -40,15 +48,26 @@ export default function AdminHome() {
       setJob(data)
       setCustomer(data.customer)
       setDescription(data.description)
+      setSelectedSOs(new Set(data.salesOrders.map(so => so.number)))
+    })
+  }
+
+  function toggleSO(number: number) {
+    setSelectedSOs(prev => {
+      const next = new Set(prev)
+      if (next.has(number)) next.delete(number)
+      else next.add(number)
+      return next
     })
   }
 
   async function printSticker() {
-    if (!job) return
+    if (!job || selectedSOs.size === 0) return
+    const soNumbers = Array.from(selectedSOs).sort((a, b) => a - b)
     const tokenRes = await fetch('/api/sticker-token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jobId: job.jobId })
+      body: JSON.stringify({ jobId: job.jobId, soNumbers })
     })
     if (!tokenRes.ok) {
       setError('Could not mint sticker token.')
@@ -106,24 +125,74 @@ export default function AdminHome() {
           <label style={{ display: 'block', fontSize: 13, color: 'var(--muted)', margin: '16px 0 6px' }}>Order description</label>
           <input type="text" value={description} onChange={e => setDescription(e.target.value)} />
 
-          <label style={{ display: 'block', fontSize: 13, color: 'var(--muted)', margin: '16px 0 6px' }}>Boxes</label>
+          <label style={{ display: 'block', fontSize: 13, color: 'var(--muted)', margin: '20px 0 10px' }}>
+            Sales orders on this pickup
+          </label>
+          {job.salesOrders.length === 0 ? (
+            <p style={{ color: 'var(--muted)', fontSize: 14, margin: 0 }}>No sales orders found for this job.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {job.salesOrders.map(so => {
+                const checked = selectedSOs.has(so.number)
+                return (
+                  <label
+                    key={so.number}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                      padding: '10px 14px',
+                      border: `1px solid ${checked ? 'var(--red)' : 'var(--line)'}`,
+                      borderRadius: 10,
+                      background: checked ? '#FEECEE' : '#fff',
+                      cursor: 'pointer',
+                      fontSize: 14
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleSO(so.number)}
+                      style={{ width: 18, height: 18, accentColor: 'var(--red)' }}
+                    />
+                    <strong style={{ minWidth: 80 }}>#{job.jobId}-{so.number}</strong>
+                    <span style={{ color: 'var(--muted)', flex: 1 }}>{so.status}</span>
+                    <span style={{ color: 'var(--muted)' }}>${so.total.toFixed(2)}</span>
+                  </label>
+                )
+              })}
+            </div>
+          )}
+
+          <label style={{ display: 'block', fontSize: 13, color: 'var(--muted)', margin: '20px 0 6px' }}>Boxes</label>
           <input
             type="number"
             min={1}
             max={99}
             value={boxes}
-            onChange={e => setBoxes(parseInt(e.target.value || '1', 10))}
+            onChange={e => setBoxes(Math.max(1, parseInt(e.target.value || '1', 10)))}
             style={{ maxWidth: 120 }}
           />
-
-          <p style={{ fontSize: 13, color: 'var(--muted)', margin: '16px 0 0' }}>
-            Assigned rep: <strong style={{ color: 'var(--ink)' }}>{job.repName ?? '—'}</strong>
-            {job.repEmail ? ` (${job.repEmail})` : ''}
+          <p style={{ fontSize: 12, color: 'var(--muted)', margin: '6px 0 0' }}>
+            Prints {boxes} sticker{boxes === 1 ? '' : 's'}, labeled <em>1 of {boxes}</em>, <em>2 of {boxes}</em>, …
           </p>
 
+          {job.repName && (
+            <p style={{ fontSize: 13, color: 'var(--muted)', margin: '16px 0 0' }}>
+              Assigned rep: <strong style={{ color: 'var(--ink)' }}>{job.repName}</strong>
+            </p>
+          )}
+
           <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
-            <button className="btn-primary" onClick={printSticker}>Print sticker</button>
-            <button className="btn-secondary" onClick={() => { setJob(null); setJobNumInput(''); setCustomer(''); setDescription(''); setBoxes(1) }}>
+            <button className="btn-primary" onClick={printSticker} disabled={selectedSOs.size === 0}>
+              Print sticker{boxes === 1 ? '' : 's'}
+            </button>
+            <button
+              className="btn-secondary"
+              onClick={() => {
+                setJob(null); setJobNumInput(''); setCustomer(''); setDescription(''); setBoxes(1); setSelectedSOs(new Set())
+              }}
+            >
               Start over
             </button>
           </div>

@@ -31,7 +31,7 @@ export default function ConfirmButton({ token }: { token: string }) {
           return
         }
         setStatus('done')
-        setMessage(data.alreadyPickedUp ? 'This order was already marked picked up.' : 'Pickup confirmed — thanks!')
+        setMessage('Thanks for your business!')
         setTimeout(() => router.refresh(), 800)
       } catch {
         setStatus('error')

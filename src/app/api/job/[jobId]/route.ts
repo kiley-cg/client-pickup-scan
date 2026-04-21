@@ -19,7 +19,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ jobId: s
       jobId: job.jobId,
       customer: job.customer,
       description: job.description,
-      repName: job.repName
+      repName: job.repName,
+      salesOrders: job.salesOrders
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)

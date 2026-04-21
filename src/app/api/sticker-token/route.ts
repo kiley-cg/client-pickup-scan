@@ -3,7 +3,10 @@ import { z } from 'zod'
 import { signToken } from '@/lib/token/hmac'
 import { isAdminFromRequest } from '@/lib/admin-auth'
 
-const Body = z.object({ jobId: z.number().int().positive() })
+const Body = z.object({
+  jobId: z.number().int().positive(),
+  soNumbers: z.array(z.number().int().positive()).min(1)
+})
 
 export async function POST(req: Request) {
   if (!isAdminFromRequest(req)) {
@@ -13,5 +16,7 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: 'bad body' }, { status: 400 })
   }
-  return NextResponse.json({ token: signToken(parsed.data.jobId) })
+  return NextResponse.json({
+    token: signToken({ jobId: parsed.data.jobId, soNumbers: parsed.data.soNumbers })
+  })
 }

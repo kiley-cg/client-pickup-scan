@@ -34,7 +34,7 @@ export default async function StickerPage(props: {
     notFound()
   }
 
-  const boxes = Math.max(1, parseInt(boxesStr || '1', 10) || 1)
+  const totalBoxes = Math.max(1, Math.min(99, parseInt(boxesStr || '1', 10) || 1))
   const scanUrl = `${env().PUBLIC_BASE_URL.replace(/\/$/, '')}/scan/${token}`
   const qrDataUrl = await QRCode.toDataURL(scanUrl, {
     errorCorrectionLevel: 'M',
@@ -52,22 +52,25 @@ export default async function StickerPage(props: {
         .sticker {
           width: 2.25in;
           height: 4in;
-          padding: 0.12in;
+          padding: 0.12in 0.14in;
           color: #111;
           display: flex;
           flex-direction: column;
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, sans-serif;
+          page-break-after: always;
+          break-after: page;
         }
-        .logo-row { display: flex; justify-content: center; margin-bottom: 0.05in; }
-        .logo-row img { height: 0.32in; width: auto; }
-        .red-bar { height: 3px; background: #E01B2B; border-radius: 2px; margin-bottom: 0.07in; }
+        .sticker:last-child { page-break-after: auto; break-after: auto; }
+        .logo-row { display: flex; justify-content: center; margin-bottom: 0.04in; }
+        .logo-row img { height: 0.30in; width: auto; }
+        .red-bar { height: 3px; background: #E01B2B; border-radius: 2px; margin-bottom: 0.06in; }
         .job-number {
           font-size: 26pt;
           font-weight: 900;
           letter-spacing: -0.5px;
           line-height: 1;
           text-align: center;
-          margin-bottom: 0.04in;
+          margin-bottom: 0.03in;
         }
         .label-small {
           text-transform: uppercase;
@@ -77,7 +80,7 @@ export default async function StickerPage(props: {
           text-align: center;
         }
         .customer {
-          font-size: 11pt;
+          font-size: 13pt;
           font-weight: 700;
           text-align: center;
           line-height: 1.15;
@@ -88,7 +91,7 @@ export default async function StickerPage(props: {
           -webkit-box-orient: vertical;
         }
         .description {
-          font-size: 8.5pt;
+          font-size: 10.5pt;
           color: #333;
           text-align: center;
           line-height: 1.2;
@@ -102,12 +105,12 @@ export default async function StickerPage(props: {
           align-self: center;
           background: #111;
           color: #fff;
-          padding: 2px 10px;
+          padding: 5px 16px;
           border-radius: 999px;
-          font-size: 8pt;
-          font-weight: 700;
-          letter-spacing: 0.5px;
-          margin-top: 0.06in;
+          font-size: 14pt;
+          font-weight: 800;
+          letter-spacing: 0.3px;
+          margin-top: 0.08in;
         }
         .qr-area {
           flex: 1;
@@ -115,9 +118,9 @@ export default async function StickerPage(props: {
           flex-direction: column;
           align-items: center;
           justify-content: flex-end;
-          margin-top: 0.08in;
+          margin-top: 0.06in;
         }
-        .qr-area img { width: 1.45in; height: 1.45in; display: block; }
+        .qr-area img { width: 1.35in; height: 1.35in; display: block; }
         .qr-caption {
           font-size: 7pt;
           color: #111;
@@ -126,23 +129,27 @@ export default async function StickerPage(props: {
           font-weight: 600;
         }
       `}</style>
-      <div className="sticker">
-        <div className="logo-row">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/cg-logo.png" alt="Color Graphics" />
+      {Array.from({ length: totalBoxes }, (_, i) => i + 1).map(boxIndex => (
+        <div className="sticker" key={boxIndex}>
+          <div className="logo-row">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/cg-logo.png" alt="Color Graphics" />
+          </div>
+          <div className="red-bar" />
+          <div className="label-small">Job</div>
+          <div className="job-number">#{jobId}</div>
+          {customer && <div className="customer">{customer}</div>}
+          {description && <div className="description">{description}</div>}
+          <div className="boxes-pill">
+            {boxIndex} of {totalBoxes} {totalBoxes === 1 ? 'box' : 'boxes'}
+          </div>
+          <div className="qr-area">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={qrDataUrl} alt="Scan to confirm pickup" />
+            <div className="qr-caption">Scan to confirm pickup</div>
+          </div>
         </div>
-        <div className="red-bar" />
-        <div className="label-small">Job</div>
-        <div className="job-number">#{jobId}</div>
-        {customer && <div className="customer">{customer}</div>}
-        {description && <div className="description">{description}</div>}
-        <div className="boxes-pill">{boxes} box{boxes === 1 ? '' : 'es'}</div>
-        <div className="qr-area">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={qrDataUrl} alt="Scan to confirm pickup" />
-          <div className="qr-caption">Scan to confirm pickup</div>
-        </div>
-      </div>
+      ))}
       <StickerAutoPrint />
     </>
   )

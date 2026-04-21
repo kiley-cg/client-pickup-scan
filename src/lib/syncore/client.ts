@@ -9,11 +9,19 @@ function headers() {
   }
 }
 
+export interface SalesOrderSummary {
+  id: number
+  number: number
+  status: string
+  total: number
+}
+
 export interface JobSummary {
   jobId: number
   customer: string
   description: string
   repName: string | null
+  salesOrders: SalesOrderSummary[]
   raw: unknown
 }
 
@@ -47,11 +55,28 @@ export async function getJob(jobId: number): Promise<JobSummary> {
   const client = job.client as Record<string, unknown> | undefined
   const primaryRep = job.primary_rep as Record<string, unknown> | undefined
 
+  const salesOrders: SalesOrderSummary[] = []
+  const rawSOs = job.sales_orders
+  if (Array.isArray(rawSOs)) {
+    for (const so of rawSOs as Record<string, unknown>[]) {
+      const id = typeof so.id === 'number' ? so.id : NaN
+      const number = typeof so.number === 'number' ? so.number : NaN
+      if (!Number.isInteger(id) || !Number.isInteger(number)) continue
+      salesOrders.push({
+        id,
+        number,
+        status: typeof so.status === 'string' ? so.status : '',
+        total: typeof so.total_value === 'number' ? so.total_value : 0
+      })
+    }
+  }
+
   return {
     jobId,
     customer: pickString(client, 'business_name', 'name', 'company') ?? `Job ${jobId}`,
     description: pickString(job, 'description', 'name', 'title') ?? '',
     repName: pickString(primaryRep, 'name', 'full_name') ?? pickString(job, 'customer_service_rep_name'),
+    salesOrders,
     raw: job
   }
 }

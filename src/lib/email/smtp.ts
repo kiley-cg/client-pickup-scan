@@ -19,6 +19,7 @@ export interface PickupEmailInput {
   jobId: number
   customer: string
   description: string
+  soNumbers: number[]
   pickedUpAt: Date
 }
 
@@ -37,15 +38,19 @@ export async function sendPickupEmail(input: PickupEmailInput): Promise<{ sent: 
     timeStyle: 'short'
   })
 
+  const sos = [...input.soNumbers].sort((a, b) => a - b)
+  const soLabel = sos.length === 1 ? `Sales Order ${input.jobId}-${sos[0]}` : `Sales Orders ${sos.map(n => `${input.jobId}-${n}`).join(', ')}`
+
   const subject = `Pickup: Job #${input.jobId} — ${input.customer}`
   const text = [
     `Job #${input.jobId} has been picked up by the customer.`,
     ``,
     `Customer: ${input.customer}`,
     `Order: ${input.description || '(no description)'}`,
+    `${soLabel}`,
     `Picked up: ${when}`,
     ``,
-    `A "CG-PICKUP::" entry has been added to the Syncore Job Log.`
+    `A red entry has been added to the Syncore Job Tracker for this pickup.`
   ].join('\n')
 
   const html = `
@@ -55,9 +60,10 @@ export async function sendPickupEmail(input: PickupEmailInput): Promise<{ sent: 
       <table style="border-collapse:collapse; font-size:14px;">
         <tr><td style="padding:4px 12px 4px 0; color:#666;">Customer</td><td style="padding:4px 0;"><strong>${escapeHtml(input.customer)}</strong></td></tr>
         <tr><td style="padding:4px 12px 4px 0; color:#666;">Order</td><td style="padding:4px 0;">${escapeHtml(input.description || '(no description)')}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0; color:#666;">${escapeHtml(sos.length === 1 ? 'Sales Order' : 'Sales Orders')}</td><td style="padding:4px 0;">${escapeHtml(sos.map(n => `${input.jobId}-${n}`).join(', '))}</td></tr>
         <tr><td style="padding:4px 12px 4px 0; color:#666;">Picked up</td><td style="padding:4px 0;">${escapeHtml(when)}</td></tr>
       </table>
-      <p style="margin:16px 0 0; color:#666; font-size:12px;">A <code>CG-PICKUP::</code> entry has been added to the Syncore Job Log for this job.</p>
+      <p style="margin:16px 0 0; color:#666; font-size:12px;">A red entry has been added to the Syncore Job Tracker for this pickup.</p>
     </div>
   `.trim()
 

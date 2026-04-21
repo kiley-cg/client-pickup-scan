@@ -1,7 +1,7 @@
 import Image from 'next/image'
-import { verifyToken } from '@/lib/token/hmac'
+import { verifyToken, tokenKey } from '@/lib/token/hmac'
 import { getJob } from '@/lib/syncore/client'
-import { getPickup } from '@/lib/pickup-store'
+import { getPickupByKey } from '@/lib/pickup-store'
 import ConfirmButton from './ConfirmButton'
 
 export const dynamic = 'force-dynamic'
@@ -45,18 +45,11 @@ export default async function ScanPage({ params }: { params: Promise<{ token: st
     </ScanShell>
   }
 
-  const existing = await getPickup(jobId).catch(() => null)
+  const existing = await getPickupByKey(tokenKey(token)).catch(() => null)
 
   if (existing) {
     return <ScanShell>
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: 56, marginBottom: 8 }}>✅</div>
-        <h1 style={{ margin: '0 0 8px', fontSize: 24 }}>Already picked up</h1>
-        <p style={{ color: 'var(--muted)', margin: '0 0 4px', fontSize: 15 }}>
-          This order was confirmed picked up on <strong style={{ color: 'var(--ink)' }}>{formatWhen(existing.pickedUpAt)}</strong>.
-        </p>
-        <JobCard jobId={jobId} customer={customer} description={description} />
-      </div>
+      <ThanksBlock jobId={jobId} customer={customer} description={description} when={existing.pickedUpAt} />
     </ScanShell>
   }
 
@@ -95,6 +88,22 @@ function JobCard({ jobId, customer, description }: { jobId: number; customer: st
       <div style={{ fontSize: 28, fontWeight: 900, letterSpacing: -0.5, marginBottom: 8 }}>#{jobId}</div>
       {customer && <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>{customer}</div>}
       {description && <div style={{ fontSize: 14, color: 'var(--muted)' }}>{description}</div>}
+    </div>
+  )
+}
+
+function ThanksBlock({ jobId, customer, description, when }: { jobId: number; customer: string; description: string; when: string | null }) {
+  return (
+    <div style={{ textAlign: 'center' }}>
+      <div style={{ fontSize: 56, marginBottom: 8 }}>🎉</div>
+      <h1 style={{ margin: '0 0 8px', fontSize: 26, color: 'var(--red)' }}>Thanks for your business!</h1>
+      <p style={{ color: 'var(--muted)', margin: '0 0 4px', fontSize: 15 }}>
+        Your pickup was confirmed on <strong style={{ color: 'var(--ink)' }}>{formatWhen(when)}</strong>.
+      </p>
+      <JobCard jobId={jobId} customer={customer} description={description} />
+      <p style={{ color: 'var(--muted)', fontSize: 13, margin: '12px 0 0' }}>
+        We appreciate you choosing Color Graphics.
+      </p>
     </div>
   )
 }
