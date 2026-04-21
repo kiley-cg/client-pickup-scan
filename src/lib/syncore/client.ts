@@ -47,11 +47,15 @@ function pickString(obj: Record<string, unknown> | undefined, ...keys: string[])
 }
 
 /**
- * Fetch the first sales order for a job and normalise to the fields we show on
- * a pickup sticker. Mirrors the lookup pattern from CG-Dashboard/src/lib/syncore/client.ts.
+ * Fetch a job by ID and normalise to the fields we show on a pickup sticker.
+ * Returns `description`, `client.business_name`, `primary_rep.name`, and
+ * `customer_service_rep_name` from the /v2/orders/jobs/{id} endpoint.
+ *
+ * Note: Syncore's job response does not include a rep email — resolution
+ * happens downstream via REP_EMAIL_MAP (see src/lib/email/smtp.ts).
  */
 export async function getJob(jobId: number): Promise<JobSummary> {
-  const res = await fetch(`${BASE}/orders/jobs/${jobId}/salesorders`, {
+  const res = await fetch(`${BASE}/orders/jobs/${jobId}`, {
     headers: headers(),
     cache: 'no-store'
   })
@@ -59,24 +63,17 @@ export async function getJob(jobId: number): Promise<JobSummary> {
     const body = await res.text().catch(() => '')
     throw new Error(`Syncore job ${jobId} lookup failed: HTTP ${res.status} ${body.slice(0, 200)}`)
   }
-  const arr = extractArray(await res.json())
-  if (arr.length === 0) throw new Error(`Job ${jobId} has no sales orders`)
-
-  const so = arr[0]
-  const client = so.client as Record<string, unknown> | undefined
-  const rep =
-    (so.sales_rep as Record<string, unknown> | undefined) ||
-    (so.rep as Record<string, unknown> | undefined) ||
-    (so.assigned_to as Record<string, unknown> | undefined) ||
-    (so.user as Record<string, unknown> | undefined)
+  const job = (await res.json()) as Record<string, unknown>
+  const client = job.client as Record<string, unknown> | undefined
+  const primaryRep = job.primary_rep as Record<string, unknown> | undefined
 
   return {
     jobId,
     customer: pickString(client, 'business_name', 'name', 'company') ?? `Job ${jobId}`,
-    description: pickString(so, 'name', 'description', 'title') ?? '',
-    repName: pickString(rep, 'name', 'full_name', 'display_name'),
-    repEmail: pickString(rep, 'email', 'email_address'),
-    raw: so
+    description: pickString(job, 'description', 'name', 'title') ?? '',
+    repName: pickString(primaryRep, 'name', 'full_name') ?? pickString(job, 'customer_service_rep_name'),
+    repEmail: pickString(primaryRep, 'email', 'email_address'),
+    raw: job
   }
 }
 
