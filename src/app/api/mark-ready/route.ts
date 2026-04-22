@@ -3,6 +3,8 @@ import { z } from 'zod'
 import { isAdminFromRequest } from '@/lib/admin-auth'
 import { getPickupByKey, mergePickupByKey } from '@/lib/pickup-store'
 import { addTrackerEntry } from '@/lib/syncore/webui'
+import { getJob } from '@/lib/syncore/client'
+import { sendReadyEmail } from '@/lib/email/smtp'
 
 const Body = z.object({ key: z.string().min(1) })
 
@@ -36,18 +38,37 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, alreadyReady: true, at: record.readyAt })
   }
 
-  const description = `${formatSOs(record.jobId, record.soNumbers)} ready in self-pickup. ${record.boxes} ${record.boxes === 1 ? 'box' : 'boxes'}`
+  const boxLabel = `${record.boxes} ${record.boxes === 1 ? 'box' : 'boxes'}`
+  const trackerText = `${formatSOs(record.jobId, record.soNumbers)} ready in self-pickup. ${boxLabel}`
 
   try {
-    await addTrackerEntry(record.jobId, description, { textColor: 1 })
+    await addTrackerEntry(record.jobId, trackerText, { textColor: 1 })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[mark-ready] tracker entry failed:', msg)
     return NextResponse.json({ ok: false, error: msg }, { status: 500 })
   }
 
-  const readyAt = new Date().toISOString()
-  await mergePickupByKey(key, { readyAt })
+  const readyAt = new Date()
+  await mergePickupByKey(key, { readyAt: readyAt.toISOString() })
 
-  return NextResponse.json({ ok: true, at: readyAt })
+  // Email the assigned salesperson + CSR. Best-effort — don't fail the request.
+  let emailResult: Awaited<ReturnType<typeof sendReadyEmail>> | null = null
+  try {
+    const job = await getJob(record.jobId)
+    emailResult = await sendReadyEmail({
+      jobId: record.jobId,
+      customer: record.customer || job.customer,
+      description: record.description || job.description,
+      soNumbers: record.soNumbers,
+      boxes: record.boxes,
+      repName: job.repName,
+      csrName: job.csrName,
+      readyAt
+    })
+  } catch (err) {
+    console.error('[mark-ready] ready email failed:', err)
+  }
+
+  return NextResponse.json({ ok: true, at: readyAt.toISOString(), email: emailResult })
 }
