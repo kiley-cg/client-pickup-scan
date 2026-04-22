@@ -3,7 +3,12 @@ import { z } from 'zod'
 import { verifyToken, tokenKey } from '@/lib/token/hmac'
 import { getJob } from '@/lib/syncore/client'
 import { addTrackerEntry } from '@/lib/syncore/webui'
-import { getPickupByKey, recordPickupByKey, recordSalesOrderPickup } from '@/lib/pickup-store'
+import {
+  getPickupByKey,
+  mergePickupByKey,
+  recordPickupByKey,
+  recordSalesOrderPickup
+} from '@/lib/pickup-store'
 import { sendPickupEmail } from '@/lib/email/smtp'
 
 const Body = z.object({ token: z.string().min(1) })
@@ -40,23 +45,33 @@ export async function POST(req: Request) {
 
   try {
     const existing = await getPickupByKey(blobKey)
-    if (existing) {
+    if (existing?.pickedUpAt) {
       return NextResponse.json({ ok: true, alreadyPickedUp: true, at: existing.pickedUpAt })
     }
 
     const job = await getJob(jobId)
     const pickedUpAt = new Date()
+    const pickedUpAtIso = pickedUpAt.toISOString()
     const description = `Picked up by customer on ${formatWhen(pickedUpAt)} — ${formatSOs(jobId, soNumbers)}`
 
     await addTrackerEntry(jobId, description, { textColor: 1 })
-    const pickedUpAtIso = pickedUpAt.toISOString()
-    await recordPickupByKey(blobKey, {
-      jobId,
-      soNumbers,
-      pickedUpAt: pickedUpAtIso,
-      customer: job.customer,
-      description: job.description
-    })
+
+    if (existing) {
+      await mergePickupByKey(blobKey, { pickedUpAt: pickedUpAtIso })
+    } else {
+      // No sticker record — write a minimal one (token was signed out-of-band)
+      await recordPickupByKey(blobKey, {
+        jobId,
+        soNumbers,
+        boxes: 1,
+        customer: job.customer,
+        description: job.description,
+        printedAt: pickedUpAtIso,
+        readyAt: null,
+        pickedUpAt: pickedUpAtIso
+      })
+    }
+
     await Promise.all(
       soNumbers.map(soNumber =>
         recordSalesOrderPickup({ jobId, soNumber, pickedUpAt: pickedUpAtIso, stickerKey: blobKey })
@@ -74,7 +89,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       ok: true,
       alreadyPickedUp: false,
-      at: pickedUpAt.toISOString(),
+      at: pickedUpAtIso,
       email: emailResult
     })
   } catch (err) {

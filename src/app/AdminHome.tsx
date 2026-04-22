@@ -12,14 +12,12 @@ interface SalesOrder {
   pickedUpAt: string | null
 }
 
-function formatPickupDate(iso: string): string {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ''
-  return d.toLocaleString('en-US', {
-    timeZone: 'America/Los_Angeles',
-    dateStyle: 'medium',
-    timeStyle: 'short'
-  })
+interface OutstandingSticker {
+  key: string
+  soNumbers: number[]
+  boxes: number
+  printedAt: string
+  readyAt: string | null
 }
 
 interface JobInfo {
@@ -28,6 +26,17 @@ interface JobInfo {
   description: string
   repName: string | null
   salesOrders: SalesOrder[]
+  outstandingStickers: OutstandingSticker[]
+}
+
+function formatWhen(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleString('en-US', {
+    timeZone: 'America/Los_Angeles',
+    dateStyle: 'medium',
+    timeStyle: 'short'
+  })
 }
 
 export default function AdminHome() {
@@ -40,6 +49,21 @@ export default function AdminHome() {
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
 
+  async function refreshJob(jobId: number) {
+    const res = await fetch(`/api/job/${jobId}`)
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      setError(`Lookup failed (${res.status}). ${body.slice(0, 160)}`)
+      setJob(null)
+      return
+    }
+    const data = (await res.json()) as JobInfo
+    setJob(data)
+    setCustomer(data.customer)
+    setDescription(data.description)
+    setSelectedSOs(new Set(data.salesOrders.filter(so => !so.pickedUpAt).map(so => so.number)))
+  }
+
   async function lookup(e: React.FormEvent) {
     e.preventDefault()
     const jobId = parseInt(jobNumInput.trim(), 10)
@@ -48,21 +72,7 @@ export default function AdminHome() {
       return
     }
     setError(null)
-    startTransition(async () => {
-      const res = await fetch(`/api/job/${jobId}`)
-      if (!res.ok) {
-        const body = await res.text().catch(() => '')
-        setError(`Lookup failed (${res.status}). ${body.slice(0, 160)}`)
-        setJob(null)
-        return
-      }
-      const data = (await res.json()) as JobInfo
-      setJob(data)
-      setCustomer(data.customer)
-      setDescription(data.description)
-      // Default-select only SOs not yet picked up
-      setSelectedSOs(new Set(data.salesOrders.filter(so => !so.pickedUpAt).map(so => so.number)))
-    })
+    startTransition(() => refreshJob(jobId))
   }
 
   function toggleSO(number: number, disabled: boolean) {
@@ -81,7 +91,13 @@ export default function AdminHome() {
     const tokenRes = await fetch('/api/sticker-token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jobId: job.jobId, soNumbers })
+      body: JSON.stringify({
+        jobId: job.jobId,
+        soNumbers,
+        boxes,
+        customer,
+        description
+      })
     })
     if (!tokenRes.ok) {
       setError('Could not mint sticker token.')
@@ -95,6 +111,8 @@ export default function AdminHome() {
       b: String(Math.max(1, boxes))
     })
     window.open(`/sticker/${job.jobId}?${params.toString()}`, '_blank', 'noopener')
+    // Reload so the new sticker shows up in "Outstanding"
+    startTransition(() => refreshJob(job.jobId))
   }
 
   return (
@@ -130,9 +148,28 @@ export default function AdminHome() {
         </div>
       )}
 
+      {job && job.outstandingStickers.length > 0 && (
+        <section style={{ background: '#fff', border: '1px solid var(--line)', borderRadius: 16, padding: 24, marginBottom: 16 }}>
+          <h2 style={{ margin: '0 0 12px', fontSize: 16 }}>Outstanding pickup stickers</h2>
+          <p style={{ color: 'var(--muted)', fontSize: 13, margin: '0 0 16px' }}>
+            Stickers printed but not yet scanned by the customer. Click <strong>Mark ready for pickup</strong> once the order is finished so the sales rep and CSR know it&apos;s in self-pickup.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {job.outstandingStickers.map(s => (
+              <OutstandingStickerRow
+                key={s.key}
+                jobId={job.jobId}
+                sticker={s}
+                onDone={() => startTransition(() => refreshJob(job.jobId))}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
       {job && (
         <section style={{ background: '#fff', border: '1px solid var(--line)', borderRadius: 16, padding: 24 }}>
-          <h2 style={{ margin: '0 0 16px', fontSize: 16 }}>Sticker details</h2>
+          <h2 style={{ margin: '0 0 16px', fontSize: 16 }}>New sticker</h2>
 
           <Field label="Job #" value={String(job.jobId)} readOnly />
 
@@ -178,7 +215,7 @@ export default function AdminHome() {
                     <strong style={{ minWidth: 80 }}>#{job.jobId}-{so.number}</strong>
                     {disabled ? (
                       <span style={{ color: 'var(--muted)', flex: 1, fontSize: 13 }}>
-                        Picked up {so.pickedUpAt ? formatPickupDate(so.pickedUpAt) : ''}
+                        Picked up {so.pickedUpAt ? formatWhen(so.pickedUpAt) : ''}
                       </span>
                     ) : (
                       <>
@@ -227,6 +264,79 @@ export default function AdminHome() {
         </section>
       )}
     </main>
+  )
+}
+
+function OutstandingStickerRow({
+  jobId,
+  sticker,
+  onDone
+}: {
+  jobId: number
+  sticker: OutstandingSticker
+  onDone: () => void
+}) {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const sos = [...sticker.soNumbers].sort((a, b) => a - b).map(n => `${jobId}-${n}`).join(', ')
+  const isReady = !!sticker.readyAt
+
+  async function markReady() {
+    setBusy(true)
+    setErr(null)
+    try {
+      const res = await fetch('/api/mark-ready', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: sticker.key })
+      })
+      if (!res.ok) {
+        const body = await res.text().catch(() => '')
+        setErr(`Failed (${res.status}) ${body.slice(0, 160)}`)
+        return
+      }
+      onDone()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: '12px 14px',
+        border: `1px solid ${isReady ? '#B7E7C5' : 'var(--line)'}`,
+        background: isReady ? '#F0FAF3' : '#FFF',
+        borderRadius: 10,
+        fontSize: 14,
+        flexWrap: 'wrap'
+      }}
+    >
+      <div style={{ minWidth: 140 }}>
+        <strong>{sos}</strong>
+        <div style={{ color: 'var(--muted)', fontSize: 12 }}>
+          {sticker.boxes} {sticker.boxes === 1 ? 'box' : 'boxes'} · Printed {formatWhen(sticker.printedAt)}
+        </div>
+      </div>
+      <div style={{ flex: 1 }}>
+        {isReady ? (
+          <span style={{ color: '#1D7A3C', fontWeight: 600 }}>
+            Marked ready {sticker.readyAt ? formatWhen(sticker.readyAt) : ''}
+          </span>
+        ) : (
+          <span style={{ color: 'var(--muted)' }}>Not yet marked ready</span>
+        )}
+      </div>
+      {!isReady && (
+        <button className="btn-primary" onClick={markReady} disabled={busy} style={{ padding: '8px 16px', fontSize: 13 }}>
+          {busy ? 'Posting…' : 'Mark ready for pickup'}
+        </button>
+      )}
+      {err && <div style={{ width: '100%', color: 'var(--red)', fontSize: 12 }}>{err}</div>}
+    </div>
   )
 }
 

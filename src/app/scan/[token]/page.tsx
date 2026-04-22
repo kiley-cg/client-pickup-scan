@@ -47,7 +47,7 @@ export default async function ScanPage({ params }: { params: Promise<{ token: st
 
   const existing = await getPickupByKey(tokenKey(token)).catch(() => null)
 
-  if (existing) {
+  if (existing?.pickedUpAt) {
     return <ScanShell>
       <ThanksBlock jobId={jobId} customer={customer} description={description} when={existing.pickedUpAt} />
     </ScanShell>

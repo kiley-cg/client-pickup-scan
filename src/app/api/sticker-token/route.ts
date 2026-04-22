@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { signToken } from '@/lib/token/hmac'
+import { signToken, tokenKey } from '@/lib/token/hmac'
 import { isAdminFromRequest } from '@/lib/admin-auth'
+import { recordPickupByKey } from '@/lib/pickup-store'
 
 const Body = z.object({
   jobId: z.number().int().positive(),
-  soNumbers: z.array(z.number().int().positive()).min(1)
+  soNumbers: z.array(z.number().int().positive()).min(1),
+  boxes: z.number().int().min(1).max(99),
+  customer: z.string().default(''),
+  description: z.string().default('')
 })
 
 export async function POST(req: Request) {
@@ -16,7 +20,21 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: 'bad body' }, { status: 400 })
   }
-  return NextResponse.json({
-    token: signToken({ jobId: parsed.data.jobId, soNumbers: parsed.data.soNumbers })
+
+  const { jobId, soNumbers, boxes, customer, description } = parsed.data
+  const token = signToken({ jobId, soNumbers })
+  const key = tokenKey(token)
+
+  await recordPickupByKey(key, {
+    jobId,
+    soNumbers,
+    boxes,
+    customer,
+    description,
+    printedAt: new Date().toISOString(),
+    readyAt: null,
+    pickedUpAt: null
   })
+
+  return NextResponse.json({ token })
 }

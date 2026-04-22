@@ -3,9 +3,12 @@ import { getStore } from '@netlify/blobs'
 export interface PickupRecord {
   jobId: number
   soNumbers: number[]
-  pickedUpAt: string
+  boxes: number
   customer: string
   description: string
+  printedAt: string
+  readyAt: string | null
+  pickedUpAt: string | null
 }
 
 export interface SalesOrderPickup {
@@ -23,7 +26,8 @@ function soKey(jobId: number, soNumber: number): string {
   return `so-${jobId}-${soNumber}`
 }
 
-// Sticker-keyed record (one per physical sticker)
+// ─── Sticker lifecycle (keyed by a hash of the token) ─────────────────────────
+
 export async function getPickupByKey(key: string): Promise<PickupRecord | null> {
   const data = await store().get(key, { type: 'json' })
   return (data as PickupRecord | null) ?? null
@@ -33,11 +37,20 @@ export async function recordPickupByKey(key: string, record: PickupRecord): Prom
   await store().setJSON(key, record)
 }
 
+export async function mergePickupByKey(key: string, patch: Partial<PickupRecord>): Promise<PickupRecord | null> {
+  const existing = await getPickupByKey(key)
+  if (!existing) return null
+  const merged: PickupRecord = { ...existing, ...patch }
+  await store().setJSON(key, merged)
+  return merged
+}
+
 export async function deletePickupByKey(key: string): Promise<void> {
   await store().delete(key)
 }
 
-// Per-sales-order markers (for availability checks on the admin page)
+// ─── Per-sales-order markers (for availability checks on the admin page) ──────
+
 export async function getSalesOrderPickup(jobId: number, soNumber: number): Promise<SalesOrderPickup | null> {
   const data = await store().get(soKey(jobId, soNumber), { type: 'json' })
   return (data as SalesOrderPickup | null) ?? null
@@ -51,23 +64,35 @@ export async function deleteSalesOrderPickup(jobId: number, soNumber: number): P
   await store().delete(soKey(jobId, soNumber))
 }
 
-// Listing — used by /admin/pickups to show recent stickers
-export interface RecentPickup {
+// ─── Listings ─────────────────────────────────────────────────────────────────
+
+export interface StickerEntry {
   key: string
   record: PickupRecord
 }
 
-export async function listRecentStickers(sinceIso: string): Promise<RecentPickup[]> {
+async function listAllStickers(): Promise<StickerEntry[]> {
   const { blobs } = await store().list({ prefix: 'sticker-' })
   const results = await Promise.all(
     blobs.map(async b => {
       const data = (await store().get(b.key, { type: 'json' })) as PickupRecord | null
       if (!data) return null
-      if (data.pickedUpAt < sinceIso) return null
       return { key: b.key, record: data }
     })
   )
-  return (results.filter(Boolean) as RecentPickup[]).sort((a, b) =>
-    b.record.pickedUpAt.localeCompare(a.record.pickedUpAt)
-  )
+  return results.filter(Boolean) as StickerEntry[]
+}
+
+export async function listRecentStickers(sinceIso: string): Promise<StickerEntry[]> {
+  const all = await listAllStickers()
+  return all
+    .filter(s => (s.record.printedAt || '') >= sinceIso)
+    .sort((a, b) => (b.record.printedAt || '').localeCompare(a.record.printedAt || ''))
+}
+
+export async function listStickersForJob(jobId: number): Promise<StickerEntry[]> {
+  const all = await listAllStickers()
+  return all
+    .filter(s => s.record.jobId === jobId)
+    .sort((a, b) => (b.record.printedAt || '').localeCompare(a.record.printedAt || ''))
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getJob } from '@/lib/syncore/client'
-import { getSalesOrderPickup } from '@/lib/pickup-store'
+import { getSalesOrderPickup, listStickersForJob } from '@/lib/pickup-store'
 import { isAdminFromRequest } from '@/lib/admin-auth'
 
 export async function GET(req: Request, { params }: { params: Promise<{ jobId: string }> }) {
@@ -22,12 +22,25 @@ export async function GET(req: Request, { params }: { params: Promise<{ jobId: s
         return { ...so, pickedUpAt: pickup?.pickedUpAt ?? null }
       })
     )
+
+    const stickers = await listStickersForJob(jobId)
+    const outstandingStickers = stickers
+      .filter(s => !s.record.pickedUpAt)
+      .map(s => ({
+        key: s.key,
+        soNumbers: s.record.soNumbers,
+        boxes: s.record.boxes,
+        printedAt: s.record.printedAt,
+        readyAt: s.record.readyAt
+      }))
+
     return NextResponse.json({
       jobId: job.jobId,
       customer: job.customer,
       description: job.description,
       repName: job.repName,
-      salesOrders
+      salesOrders,
+      outstandingStickers
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
