@@ -83,11 +83,11 @@ async function listAllStickers(): Promise<StickerEntry[]> {
   return results.filter(Boolean) as StickerEntry[]
 }
 
-export async function listRecentStickers(sinceIso: string): Promise<StickerEntry[]> {
+export async function listRecentStickers(limit = 100): Promise<StickerEntry[]> {
   const all = await listAllStickers()
   return all
-    .filter(s => (s.record.printedAt || '') >= sinceIso)
     .sort((a, b) => (b.record.printedAt || '').localeCompare(a.record.printedAt || ''))
+    .slice(0, Math.max(1, limit))
 }
 
 export async function listStickersForJob(jobId: number): Promise<StickerEntry[]> {

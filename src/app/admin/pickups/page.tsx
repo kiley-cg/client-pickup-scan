@@ -7,9 +7,7 @@ import PickupRow from './PickupRow'
 
 export const dynamic = 'force-dynamic'
 
-function daysAgoIso(days: number): string {
-  return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
-}
+const STICKER_LIMIT = 100
 
 function formatWhen(iso: string): string {
   if (!iso) return '—'
@@ -27,7 +25,7 @@ export default async function AdminPickupsPage() {
     redirect('/login?next=/admin/pickups')
   }
 
-  const stickers = await listRecentStickers(daysAgoIso(15))
+  const stickers = await listRecentStickers(STICKER_LIMIT)
 
   return (
     <main style={{ maxWidth: 1080, margin: '0 auto', padding: '40px 24px' }}>
@@ -36,7 +34,7 @@ export default async function AdminPickupsPage() {
         <div>
           <h1 style={{ margin: 0, fontSize: 22 }}>Recent stickers</h1>
           <p style={{ margin: 0, color: 'var(--muted)', fontSize: 14 }}>
-            Last 15 days. Clearing removes the record so the sticker can be scanned again.
+            Last {STICKER_LIMIT} stickers. Clearing removes the record so the sticker can be scanned again.
           </p>
         </div>
         <div style={{ marginLeft: 'auto' }}>
@@ -46,7 +44,7 @@ export default async function AdminPickupsPage() {
 
       {stickers.length === 0 ? (
         <div style={{ background: '#fff', border: '1px solid var(--line)', borderRadius: 16, padding: 32, textAlign: 'center', color: 'var(--muted)' }}>
-          No stickers in the last 15 days.
+          No stickers yet.
         </div>
       ) : (
         <div style={{ background: '#fff', border: '1px solid var(--line)', borderRadius: 16, overflow: 'hidden' }}>
