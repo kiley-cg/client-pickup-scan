@@ -315,14 +315,30 @@ function OutstandingStickerRow({
   }
 
   async function sendTest(reminder: boolean) {
-    if (!validEmail) return
-    setTestStatus('Sending…')
+    // Tests ALWAYS prompt for a destination, separate from the customer-email
+    // field, so a test never accidentally goes to a real customer.
+    const remembered = typeof window !== 'undefined' ? window.localStorage.getItem('cg-test-email') ?? '' : ''
+    const dest = window.prompt(
+      `Send the ${reminder ? 'weekly reminder' : 'initial'} test email to which address?\n\n(This is for previewing only — the email will NOT go to the customer.)`,
+      remembered
+    )
+    if (dest == null) return
+    const trimmed = dest.trim()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setTestStatus('Test cancelled: not a valid email')
+      return
+    }
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('cg-test-email', trimmed)
+    }
+
+    setTestStatus(`Sending test to ${trimmed}…`)
     try {
       const res = await fetch('/api/test-customer-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          to: customerEmail.trim(),
+          to: trimmed,
           jobId,
           customer: 'Preview Recipient',
           reminder
@@ -333,7 +349,7 @@ function OutstandingStickerRow({
         setTestStatus(`Test failed: ${body.reason ?? body.error ?? `HTTP ${res.status}`}`)
         return
       }
-      setTestStatus(`Test sent to ${body.to ?? customerEmail.trim()}`)
+      setTestStatus(`Test sent to ${body.to ?? trimmed}`)
     } catch (e) {
       setTestStatus(`Test failed: ${e instanceof Error ? e.message : String(e)}`)
     }
@@ -413,9 +429,9 @@ function OutstandingStickerRow({
         </div>
       )}
 
-      {!isReady && emailCustomer && validEmail && (
+      {!isReady && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: 'var(--muted)', flexWrap: 'wrap' }}>
-          <span>Preview before launching:</span>
+          <span>Preview email design (sent only to the address you type):</span>
           <button
             type="button"
             onClick={() => sendTest(false)}
