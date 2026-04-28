@@ -173,6 +173,140 @@ export async function sendReadyEmail(input: ReadyEmailInput): Promise<{ sent: bo
   }
 }
 
+// ─── Customer-facing "your order is ready for pickup" email ────────────────
+
+const CG_ADDRESS = '2540 Crites St. SW, Tumwater, WA 98512'
+const CG_PHONE = '(800) 456-8288'
+const CG_HOURS_WEEK_LABEL = 'Mon–Thu'
+const CG_HOURS_WEEK_VALUE = '8 AM – 5 PM'
+const CG_HOURS_FRI_LABEL = 'Friday'
+const CG_HOURS_FRI_VALUE = '8 AM – Noon'
+
+export interface CustomerReadyEmailInput {
+  to: string
+  jobId: number
+  customer: string
+  readyAt: Date
+}
+
+function isLikelyEmail(s: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim())
+}
+
+export async function sendCustomerReadyEmail(input: CustomerReadyEmailInput): Promise<{ sent: boolean; to: string | null; reason?: string }> {
+  if (!env().GMAIL_APP_PASSWORD) {
+    return { sent: false, to: null, reason: 'GMAIL_APP_PASSWORD not configured — skipping email.' }
+  }
+  const to = input.to.trim()
+  if (!to) {
+    return { sent: false, to: null, reason: 'No customer email on file.' }
+  }
+  if (!isLikelyEmail(to)) {
+    return { sent: false, to: null, reason: `Customer email looks invalid: ${to}` }
+  }
+
+  const logoUrl = `${env().PUBLIC_BASE_URL.replace(/\/$/, '')}/cg-logo.png`
+  const subject = `Your Color Graphics order is ready for pickup`
+
+  const text = [
+    `Hi ${input.customer || 'there'},`,
+    ``,
+    `Your order (Job #${input.jobId}) is ready for pickup at Color Graphics.`,
+    ``,
+    `Pickup area:`,
+    `  ${CG_ADDRESS}`,
+    ``,
+    `Hours:`,
+    `  ${CG_HOURS_WEEK_LABEL}: ${CG_HOURS_WEEK_VALUE}`,
+    `  ${CG_HOURS_FRI_LABEL}: ${CG_HOURS_FRI_VALUE}`,
+    ``,
+    `Please bring this email or your name when you arrive. There's a sticker on your order with a QR code — scan it when you pick up so we know it's been received.`,
+    ``,
+    `Questions? Call ${CG_PHONE}.`,
+    ``,
+    `Thanks for choosing Color Graphics — we'll see you soon!`
+  ].join('\n')
+
+  const html = `
+<!doctype html>
+<html>
+  <body style="margin:0; padding:0; background:#F7F7F7;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#F7F7F7; padding:24px 0;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="560" cellspacing="0" cellpadding="0" border="0" style="background:#FFFFFF; border-radius:12px; overflow:hidden; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif; color:#111111;">
+            <tr>
+              <td style="background:#E01B2B; padding:24px 32px;">
+                <img src="${logoUrl}" alt="Color Graphics" height="40" style="display:block; height:40px; width:auto; filter: brightness(0) invert(1);" />
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:32px;">
+                <h1 style="margin:0 0 16px; font-size:24px; line-height:1.25; color:#111111; font-weight:800;">Your order is ready for pickup</h1>
+                <p style="margin:0 0 18px; font-size:16px; line-height:1.55; color:#111111;">
+                  Hi ${escapeHtml(input.customer || 'there')},
+                </p>
+                <p style="margin:0 0 24px; font-size:16px; line-height:1.55; color:#111111;">
+                  Your order (<strong>Job #${input.jobId}</strong>) is ready and waiting in our self-pickup area. Come grab it whenever it's convenient.
+                </p>
+
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#F7F7F7; border-radius:8px; padding:18px; margin:0 0 24px;">
+                  <tr>
+                    <td style="padding:0 0 14px;">
+                      <div style="font-size:11px; letter-spacing:1px; text-transform:uppercase; color:#666666; font-weight:600; margin:0 0 4px;">Pickup area</div>
+                      <div style="font-size:15px; color:#111111; font-weight:600;">${escapeHtml(CG_ADDRESS)}</div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:0;">
+                      <div style="font-size:11px; letter-spacing:1px; text-transform:uppercase; color:#666666; font-weight:600; margin:0 0 4px;">Hours</div>
+                      <div style="font-size:15px; color:#111111;"><strong>${escapeHtml(CG_HOURS_WEEK_LABEL)}: ${escapeHtml(CG_HOURS_WEEK_VALUE)}</strong></div>
+                      <div style="font-size:15px; color:#E01B2B; margin-top:2px;"><strong>${escapeHtml(CG_HOURS_FRI_LABEL)}: ${escapeHtml(CG_HOURS_FRI_VALUE)}</strong></div>
+                    </td>
+                  </tr>
+                </table>
+
+                <p style="margin:0 0 18px; font-size:14px; line-height:1.55; color:#333333;">
+                  When you arrive, just give us your name. There's a sticker on your order with a QR code &mdash; if you'd like, scan it on your phone so we know it's been picked up.
+                </p>
+
+                <p style="margin:0 0 8px; font-size:14px; color:#666666;">
+                  Questions? Call <a href="tel:${CG_PHONE.replace(/[^0-9+]/g, '')}" style="color:#E01B2B; text-decoration:none; font-weight:600;">${escapeHtml(CG_PHONE)}</a>.
+                </p>
+                <p style="margin:24px 0 0; font-size:15px; color:#111111;">
+                  Thanks for choosing <strong>Color Graphics</strong> &mdash; we'll see you soon!
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td style="background:#111111; padding:18px 32px; color:#CCCCCC; font-size:12px; line-height:1.5; text-align:center;">
+                Color Graphics &middot; ${escapeHtml(CG_ADDRESS)} &middot; ${escapeHtml(CG_PHONE)}
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
+  `.trim()
+
+  try {
+    await transporter().sendMail({
+      from: `Color Graphics <${env().GMAIL_USER}>`,
+      to,
+      replyTo: env().GMAIL_USER,
+      subject,
+      text,
+      html
+    })
+    return { sent: true, to }
+  } catch (err) {
+    console.error('[customer-ready-email] send failed:', err)
+    return { sent: false, to, reason: err instanceof Error ? err.message : String(err) }
+  }
+}
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')

@@ -39,6 +39,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ jobId: s
       customer: job.customer,
       description: job.description,
       repName: job.repName,
+      clientEmail: job.clientEmail,
       salesOrders,
       outstandingStickers
     })

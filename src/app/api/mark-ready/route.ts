@@ -4,9 +4,13 @@ import { isAdminFromRequest } from '@/lib/admin-auth'
 import { getPickupByKey, mergePickupByKey } from '@/lib/pickup-store'
 import { addTrackerEntry } from '@/lib/syncore/webui'
 import { getJob } from '@/lib/syncore/client'
-import { sendReadyEmail } from '@/lib/email/smtp'
+import { sendReadyEmail, sendCustomerReadyEmail } from '@/lib/email/smtp'
 
-const Body = z.object({ key: z.string().min(1) })
+const Body = z.object({
+  key: z.string().min(1),
+  emailCustomer: z.boolean().optional().default(false),
+  customerEmail: z.string().optional().default('')
+})
 
 function formatSOs(jobId: number, soNumbers: number[]): string {
   const list = [...soNumbers].sort((a, b) => a - b).map(n => `${jobId}-${n}`).join(', ')
@@ -22,7 +26,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: 'bad body' }, { status: 400 })
   }
 
-  const { key } = parsed.data
+  const { key, emailCustomer, customerEmail } = parsed.data
   if (!key.startsWith('sticker-')) {
     return NextResponse.json({ ok: false, error: 'invalid key' }, { status: 400 })
   }
@@ -53,10 +57,11 @@ export async function POST(req: Request) {
   await mergePickupByKey(key, { readyAt: readyAt.toISOString() })
 
   // Email the assigned salesperson + CSR. Best-effort — don't fail the request.
-  let emailResult: Awaited<ReturnType<typeof sendReadyEmail>> | null = null
+  let staffEmail: Awaited<ReturnType<typeof sendReadyEmail>> | null = null
+  let customerEmailResult: Awaited<ReturnType<typeof sendCustomerReadyEmail>> | null = null
   try {
     const job = await getJob(record.jobId)
-    emailResult = await sendReadyEmail({
+    staffEmail = await sendReadyEmail({
       jobId: record.jobId,
       customer: record.customer || job.customer,
       description: record.description || job.description,
@@ -66,9 +71,28 @@ export async function POST(req: Request) {
       csrName: job.csrName,
       readyAt
     })
+
+    if (emailCustomer) {
+      const to = (customerEmail || job.clientEmail || '').trim()
+      if (to) {
+        customerEmailResult = await sendCustomerReadyEmail({
+          to,
+          jobId: record.jobId,
+          customer: record.customer || job.customer,
+          readyAt
+        })
+      } else {
+        customerEmailResult = { sent: false, to: null, reason: 'No customer email provided.' }
+      }
+    }
   } catch (err) {
-    console.error('[mark-ready] ready email failed:', err)
+    console.error('[mark-ready] email step failed:', err)
   }
 
-  return NextResponse.json({ ok: true, at: readyAt.toISOString(), email: emailResult })
+  return NextResponse.json({
+    ok: true,
+    at: readyAt.toISOString(),
+    staffEmail,
+    customerEmail: customerEmailResult
+  })
 }

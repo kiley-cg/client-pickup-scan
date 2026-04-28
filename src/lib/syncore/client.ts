@@ -22,6 +22,7 @@ export interface JobSummary {
   description: string
   repName: string | null
   csrName: string | null
+  clientEmail: string | null
   salesOrders: SalesOrderSummary[]
   raw: unknown
 }
@@ -78,6 +79,7 @@ export async function getJob(jobId: number): Promise<JobSummary> {
     description: pickString(job, 'description', 'name', 'title') ?? '',
     repName: pickString(primaryRep, 'name', 'full_name'),
     csrName: pickString(job, 'customer_service_rep_name'),
+    clientEmail: pickString(client, 'email', 'email_address'),
     salesOrders,
     raw: job
   }

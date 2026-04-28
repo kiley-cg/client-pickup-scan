@@ -25,6 +25,7 @@ interface JobInfo {
   customer: string
   description: string
   repName: string | null
+  clientEmail: string | null
   salesOrders: SalesOrder[]
   outstandingStickers: OutstandingSticker[]
 }
@@ -160,6 +161,7 @@ export default function AdminHome() {
                 key={s.key}
                 jobId={job.jobId}
                 sticker={s}
+                clientEmail={job.clientEmail}
                 onDone={() => startTransition(() => refreshJob(job.jobId))}
               />
             ))}
@@ -270,16 +272,21 @@ export default function AdminHome() {
 function OutstandingStickerRow({
   jobId,
   sticker,
+  clientEmail,
   onDone
 }: {
   jobId: number
   sticker: OutstandingSticker
+  clientEmail: string | null
   onDone: () => void
 }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const [emailCustomer, setEmailCustomer] = useState(true)
+  const [customerEmail, setCustomerEmail] = useState(clientEmail ?? '')
   const sos = [...sticker.soNumbers].sort((a, b) => a - b).map(n => `${jobId}-${n}`).join(', ')
   const isReady = !!sticker.readyAt
+  const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail.trim())
 
   async function markReady() {
     setBusy(true)
@@ -288,7 +295,11 @@ function OutstandingStickerRow({
       const res = await fetch('/api/mark-ready', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: sticker.key })
+        body: JSON.stringify({
+          key: sticker.key,
+          emailCustomer,
+          customerEmail: emailCustomer ? customerEmail.trim() : ''
+        })
       })
       if (!res.ok) {
         const body = await res.text().catch(() => '')
@@ -305,37 +316,77 @@ function OutstandingStickerRow({
     <div
       style={{
         display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        padding: '12px 14px',
+        flexDirection: 'column',
+        gap: 10,
+        padding: '14px 16px',
         border: `1px solid ${isReady ? '#B7E7C5' : 'var(--line)'}`,
         background: isReady ? '#F0FAF3' : '#FFF',
         borderRadius: 10,
-        fontSize: 14,
-        flexWrap: 'wrap'
+        fontSize: 14
       }}
     >
-      <div style={{ minWidth: 140 }}>
-        <strong>{sos}</strong>
-        <div style={{ color: 'var(--muted)', fontSize: 12 }}>
-          {sticker.boxes} {sticker.boxes === 1 ? 'box' : 'boxes'} · Printed {formatWhen(sticker.printedAt)}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ minWidth: 140 }}>
+          <strong>{sos}</strong>
+          <div style={{ color: 'var(--muted)', fontSize: 12 }}>
+            {sticker.boxes} {sticker.boxes === 1 ? 'box' : 'boxes'} · Printed {formatWhen(sticker.printedAt)}
+          </div>
         </div>
-      </div>
-      <div style={{ flex: 1 }}>
-        {isReady ? (
-          <span style={{ color: '#1D7A3C', fontWeight: 600 }}>
-            Marked ready {sticker.readyAt ? formatWhen(sticker.readyAt) : ''}
-          </span>
-        ) : (
-          <span style={{ color: 'var(--muted)' }}>Not yet marked ready</span>
+        <div style={{ flex: 1 }}>
+          {isReady ? (
+            <span style={{ color: '#1D7A3C', fontWeight: 600 }}>
+              Marked ready {sticker.readyAt ? formatWhen(sticker.readyAt) : ''}
+            </span>
+          ) : (
+            <span style={{ color: 'var(--muted)' }}>Not yet marked ready</span>
+          )}
+        </div>
+        {!isReady && (
+          <button
+            className="btn-primary"
+            onClick={markReady}
+            disabled={busy || (emailCustomer && !validEmail)}
+            style={{ padding: '8px 16px', fontSize: 13 }}
+          >
+            {busy ? 'Posting…' : 'Mark ready for pickup'}
+          </button>
         )}
       </div>
+
       {!isReady && (
-        <button className="btn-primary" onClick={markReady} disabled={busy} style={{ padding: '8px 16px', fontSize: 13 }}>
-          {busy ? 'Posting…' : 'Mark ready for pickup'}
-        </button>
+        <div style={{ borderTop: '1px solid var(--line)', paddingTop: 10, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--ink)', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={emailCustomer}
+              onChange={e => setEmailCustomer(e.target.checked)}
+              style={{ width: 16, height: 16, accentColor: 'var(--red)' }}
+            />
+            Email customer
+          </label>
+          <input
+            type="email"
+            value={customerEmail}
+            disabled={!emailCustomer}
+            onChange={e => setCustomerEmail(e.target.value)}
+            placeholder={clientEmail ? '' : 'No email on file — type one'}
+            style={{
+              flex: 1,
+              minWidth: 220,
+              padding: '6px 10px',
+              fontSize: 13,
+              border: `1px solid ${emailCustomer && !validEmail ? 'var(--red)' : 'var(--line)'}`,
+              borderRadius: 8,
+              opacity: emailCustomer ? 1 : 0.6
+            }}
+          />
+          {emailCustomer && !validEmail && (
+            <span style={{ color: 'var(--red)', fontSize: 12 }}>Enter a valid email</span>
+          )}
+        </div>
       )}
-      {err && <div style={{ width: '100%', color: 'var(--red)', fontSize: 12 }}>{err}</div>}
+
+      {err && <div style={{ color: 'var(--red)', fontSize: 12 }}>{err}</div>}
     </div>
   )
 }
