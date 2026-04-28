@@ -340,7 +340,6 @@ function OutstandingStickerRow({
         body: JSON.stringify({
           to: trimmed,
           jobId,
-          customer: 'Preview Recipient',
           reminder
         })
       })

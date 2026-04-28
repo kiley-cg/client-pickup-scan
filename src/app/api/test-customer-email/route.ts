@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { isAdminFromRequest } from '@/lib/admin-auth'
 import { sendCustomerReadyEmail } from '@/lib/email/smtp'
+import { getJob } from '@/lib/syncore/client'
 import { env } from '@/lib/env'
 
 const Body = z.object({
@@ -21,13 +22,25 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'bad body', details: parsed.error.format() }, { status: 400 })
   }
 
-  const {
-    to,
-    jobId = 99999,
-    customer = 'Test Customer',
-    description = 'Embroidered Polos × 24 — Sample Order',
-    reminder
-  } = parsed.data
+  const { to, reminder } = parsed.data
+  let { jobId, customer, description } = parsed.data
+
+  // Live-pull from Syncore so the preview matches what a real send will
+  // produce. If jobId is missing or Syncore lookup fails, fall back to
+  // placeholders so staff can still preview the layout.
+  if (jobId) {
+    try {
+      const job = await getJob(jobId)
+      customer = customer ?? job.customer
+      description = description ?? job.description
+    } catch (err) {
+      console.warn(`[test-customer-email] Syncore lookup failed for job ${jobId}:`, err)
+    }
+  }
+
+  jobId = jobId ?? 99999
+  customer = customer ?? 'Test Customer'
+  description = description ?? 'Embroidered Polos × 24 — Sample Order'
 
   // Build a fake "ready since" timestamp so reminder copy reads naturally.
   const readyAt = reminder
