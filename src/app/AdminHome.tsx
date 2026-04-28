@@ -288,8 +288,6 @@ function OutstandingStickerRow({
   const isReady = !!sticker.readyAt
   const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail.trim())
 
-  const [testStatus, setTestStatus] = useState<string | null>(null)
-
   async function markReady() {
     setBusy(true)
     setErr(null)
@@ -311,46 +309,6 @@ function OutstandingStickerRow({
       onDone()
     } finally {
       setBusy(false)
-    }
-  }
-
-  async function sendTest(reminder: boolean) {
-    // Tests ALWAYS prompt for a destination, separate from the customer-email
-    // field, so a test never accidentally goes to a real customer.
-    const remembered = typeof window !== 'undefined' ? window.localStorage.getItem('cg-test-email') ?? '' : ''
-    const dest = window.prompt(
-      `Send the ${reminder ? 'weekly reminder' : 'initial'} test email to which address?\n\n(This is for previewing only — the email will NOT go to the customer.)`,
-      remembered
-    )
-    if (dest == null) return
-    const trimmed = dest.trim()
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
-      setTestStatus('Test cancelled: not a valid email')
-      return
-    }
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem('cg-test-email', trimmed)
-    }
-
-    setTestStatus(`Sending test to ${trimmed}…`)
-    try {
-      const res = await fetch('/api/test-customer-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to: trimmed,
-          jobId,
-          reminder
-        })
-      })
-      const body = await res.json().catch(() => ({}))
-      if (!res.ok || !body.ok) {
-        setTestStatus(`Test failed: ${body.reason ?? body.error ?? `HTTP ${res.status}`}`)
-        return
-      }
-      setTestStatus(`Test sent to ${body.to ?? trimmed}`)
-    } catch (e) {
-      setTestStatus(`Test failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -425,27 +383,6 @@ function OutstandingStickerRow({
           {emailCustomer && !validEmail && (
             <span style={{ color: 'var(--red)', fontSize: 12 }}>Enter a valid email</span>
           )}
-        </div>
-      )}
-
-      {!isReady && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: 'var(--muted)', flexWrap: 'wrap' }}>
-          <span>Preview email design (sent only to the address you type):</span>
-          <button
-            type="button"
-            onClick={() => sendTest(false)}
-            style={{ padding: '4px 10px', fontSize: 12, border: '1px solid var(--line)', borderRadius: 6, background: '#fff', cursor: 'pointer' }}
-          >
-            Send test (initial)
-          </button>
-          <button
-            type="button"
-            onClick={() => sendTest(true)}
-            style={{ padding: '4px 10px', fontSize: 12, border: '1px solid var(--line)', borderRadius: 6, background: '#fff', cursor: 'pointer' }}
-          >
-            Send test (weekly reminder)
-          </button>
-          {testStatus && <span style={{ color: testStatus.startsWith('Test sent') ? '#1D7A3C' : 'var(--red)' }}>{testStatus}</span>}
         </div>
       )}
 
