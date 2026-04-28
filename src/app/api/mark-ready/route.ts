@@ -54,7 +54,15 @@ export async function POST(req: Request) {
   }
 
   const readyAt = new Date()
-  await mergePickupByKey(key, { readyAt: readyAt.toISOString() })
+  const resolvedCustomerEmail = emailCustomer
+    ? (customerEmail || '').trim() || null
+    : null
+  await mergePickupByKey(key, {
+    readyAt: readyAt.toISOString(),
+    customerEmail: resolvedCustomerEmail,
+    lastReminderAt: null,
+    reminderCount: 0
+  })
 
   // Email the assigned salesperson + CSR. Best-effort — don't fail the request.
   let staffEmail: Awaited<ReturnType<typeof sendReadyEmail>> | null = null
@@ -74,13 +82,18 @@ export async function POST(req: Request) {
 
     if (emailCustomer) {
       const to = (customerEmail || job.clientEmail || '').trim()
-      if (to) {
+      if (to && record.token) {
+        const baseUrl = process.env.PUBLIC_BASE_URL?.replace(/\/$/, '') ?? ''
         customerEmailResult = await sendCustomerReadyEmail({
           to,
           jobId: record.jobId,
           customer: record.customer || job.customer,
-          readyAt
+          readyAt,
+          scanUrl: `${baseUrl}/scan/${record.token}`,
+          reminder: false
         })
+      } else if (!record.token) {
+        customerEmailResult = { sent: false, to, reason: 'Sticker record missing token (printed before v3).' }
       } else {
         customerEmailResult = { sent: false, to: null, reason: 'No customer email provided.' }
       }

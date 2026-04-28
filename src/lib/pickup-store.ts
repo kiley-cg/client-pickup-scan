@@ -9,6 +9,11 @@ export interface PickupRecord {
   printedAt: string
   readyAt: string | null
   pickedUpAt: string | null
+  // Below are optional — may be missing on older records prior to v3.
+  token?: string                   // signed token, used by reminder cron to build the scan URL
+  customerEmail?: string | null    // email used at mark-ready (null if staff opted out)
+  lastReminderAt?: string | null   // most recent weekly reminder timestamp
+  reminderCount?: number           // # of weekly reminders sent
 }
 
 export interface SalesOrderPickup {

@@ -33,7 +33,11 @@ export async function POST(req: Request) {
     description,
     printedAt: new Date().toISOString(),
     readyAt: null,
-    pickedUpAt: null
+    pickedUpAt: null,
+    token,
+    customerEmail: null,
+    lastReminderAt: null,
+    reminderCount: 0
   })
 
   return NextResponse.json({ token })

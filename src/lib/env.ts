@@ -10,7 +10,8 @@ const EnvSchema = z.object({
   PUBLIC_BASE_URL: z.string().url(),
   ADMIN_PASSWORD: z.string().min(1),
   PICKUP_EMAIL_TO: z.string().optional().default(''),
-  REP_EMAIL_MAP: z.string().optional().default('')
+  REP_EMAIL_MAP: z.string().optional().default(''),
+  CRON_SECRET: z.string().optional().default('')
 })
 
 let cached: z.infer<typeof EnvSchema> | null = null

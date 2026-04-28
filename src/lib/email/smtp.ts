@@ -181,12 +181,31 @@ const CG_HOURS_WEEK_LABEL = 'Mon–Thu'
 const CG_HOURS_WEEK_VALUE = '8 AM – 5 PM'
 const CG_HOURS_FRI_LABEL = 'Friday'
 const CG_HOURS_FRI_VALUE = '8 AM – Noon'
+const CG_WEBSITE = 'https://www.colorgraphicswa.com'
+const CG_FACEBOOK = 'https://www.facebook.com/color.graphics.1'
+const CG_LINKEDIN = 'https://www.linkedin.com/company-beta/4388443/'
+const CG_INSTAGRAM = 'https://www.instagram.com/color_graphics_wa/'
+
+function formatDayDate(d: Date): string {
+  return d.toLocaleString('en-US', {
+    timeZone: 'America/Los_Angeles',
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric'
+  })
+}
+
+function daysSince(d: Date): number {
+  return Math.max(0, Math.floor((Date.now() - d.getTime()) / (24 * 60 * 60 * 1000)))
+}
 
 export interface CustomerReadyEmailInput {
   to: string
   jobId: number
   customer: string
   readyAt: Date
+  scanUrl: string         // /scan/<token> — for the "I already picked it up" link
+  reminder?: boolean      // false (default) for the first email, true for weekly follow-ups
 }
 
 function isLikelyEmail(s: string): boolean {
@@ -206,12 +225,30 @@ export async function sendCustomerReadyEmail(input: CustomerReadyEmailInput): Pr
   }
 
   const logoUrl = `${env().PUBLIC_BASE_URL.replace(/\/$/, '')}/cg-logo.png`
-  const subject = `Your Color Graphics order is ready for pickup`
+  const isReminder = !!input.reminder
+  const days = daysSince(input.readyAt)
+  const readyDayLabel = formatDayDate(input.readyAt)
+
+  const subject = isReminder
+    ? `Reminder: Your Color Graphics order is still ready for pickup`
+    : `Your Color Graphics order is ready for pickup`
+
+  const headline = isReminder
+    ? `Friendly reminder — your order is still waiting`
+    : `Your order is ready for pickup`
+
+  const lead = isReminder
+    ? `Just a friendly reminder that your order (<strong>Job #${input.jobId}</strong>) has been ready in our self-pickup area since <strong>${escapeHtml(readyDayLabel)}</strong>${days ? ` (${days} day${days === 1 ? '' : 's'} ago)` : ''}. Come grab it whenever it's convenient.`
+    : `Your order (<strong>Job #${input.jobId}</strong>) is ready and waiting in our self-pickup area. Come grab it whenever it's convenient.`
+
+  const leadText = isReminder
+    ? `Just a friendly reminder that your order (Job #${input.jobId}) has been ready in our self-pickup area since ${readyDayLabel}${days ? ` (${days} day${days === 1 ? '' : 's'} ago)` : ''}.`
+    : `Your order (Job #${input.jobId}) is ready for pickup at Color Graphics.`
 
   const text = [
     `Hi ${input.customer || 'there'},`,
     ``,
-    `Your order (Job #${input.jobId}) is ready for pickup at Color Graphics.`,
+    leadText,
     ``,
     `Pickup area:`,
     `  ${CG_ADDRESS}`,
@@ -220,12 +257,32 @@ export async function sendCustomerReadyEmail(input: CustomerReadyEmailInput): Pr
     `  ${CG_HOURS_WEEK_LABEL}: ${CG_HOURS_WEEK_VALUE}`,
     `  ${CG_HOURS_FRI_LABEL}: ${CG_HOURS_FRI_VALUE}`,
     ``,
-    `Please bring this email or your name when you arrive. There's a sticker on your order with a QR code — scan it when you pick up so we know it's been received.`,
+    `Already picked it up? Confirm here so we stop sending reminders:`,
+    `  ${input.scanUrl}`,
     ``,
     `Questions? Call ${CG_PHONE}.`,
     ``,
-    `Thanks for choosing Color Graphics — we'll see you soon!`
-  ].join('\n')
+    `Thanks for choosing Color Graphics — we'll see you soon!`,
+    ``,
+    `Website: ${CG_WEBSITE}`,
+    `Facebook: ${CG_FACEBOOK}`,
+    CG_INSTAGRAM ? `Instagram: ${CG_INSTAGRAM}` : '',
+    `LinkedIn: ${CG_LINKEDIN}`
+  ].filter(Boolean).join('\n')
+
+  const socialLinks = [
+    { label: 'Website', url: CG_WEBSITE },
+    { label: 'Facebook', url: CG_FACEBOOK },
+    CG_INSTAGRAM ? { label: 'Instagram', url: CG_INSTAGRAM } : null,
+    { label: 'LinkedIn', url: CG_LINKEDIN }
+  ].filter(Boolean) as { label: string; url: string }[]
+
+  const socialHtml = socialLinks
+    .map(
+      l =>
+        `<a href="${l.url}" style="color:#E01B2B; text-decoration:none; font-weight:600; margin:0 10px;">${l.label}</a>`
+    )
+    .join('<span style="color:#CCCCCC;">|</span>')
 
   const html = `
 <!doctype html>
@@ -242,12 +299,12 @@ export async function sendCustomerReadyEmail(input: CustomerReadyEmailInput): Pr
             </tr>
             <tr>
               <td style="padding:32px;">
-                <h1 style="margin:0 0 16px; font-size:24px; line-height:1.25; color:#111111; font-weight:800;">Your order is ready for pickup</h1>
+                <h1 style="margin:0 0 16px; font-size:24px; line-height:1.25; color:#111111; font-weight:800;">${escapeHtml(headline)}</h1>
                 <p style="margin:0 0 18px; font-size:16px; line-height:1.55; color:#111111;">
                   Hi ${escapeHtml(input.customer || 'there')},
                 </p>
                 <p style="margin:0 0 24px; font-size:16px; line-height:1.55; color:#111111;">
-                  Your order (<strong>Job #${input.jobId}</strong>) is ready and waiting in our self-pickup area. Come grab it whenever it's convenient.
+                  ${lead}
                 </p>
 
                 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#F7F7F7; border-radius:8px; padding:18px; margin:0 0 24px;">
@@ -266,21 +323,31 @@ export async function sendCustomerReadyEmail(input: CustomerReadyEmailInput): Pr
                   </tr>
                 </table>
 
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 22px;">
+                  <tr>
+                    <td align="center">
+                      <a href="${input.scanUrl}" style="display:inline-block; background:#111111; color:#FFFFFF; text-decoration:none; padding:12px 24px; border-radius:8px; font-size:15px; font-weight:700;">
+                        Already picked up? Confirm here →
+                      </a>
+                      <div style="margin-top:8px; font-size:12px; color:#666666;">If you already grabbed your order and forgot to scan the QR.</div>
+                    </td>
+                  </tr>
+                </table>
+
                 <p style="margin:0 0 18px; font-size:14px; line-height:1.55; color:#333333;">
-                  When you arrive, just give us your name. There's a sticker on your order with a QR code &mdash; if you'd like, scan it on your phone so we know it's been picked up.
+                  When you arrive, just give us your name. There's also a sticker on your order with a QR code &mdash; scan it on your phone so we know it's been picked up.
                 </p>
 
                 <p style="margin:0 0 8px; font-size:14px; color:#666666;">
                   Questions? Call <a href="tel:${CG_PHONE.replace(/[^0-9+]/g, '')}" style="color:#E01B2B; text-decoration:none; font-weight:600;">${escapeHtml(CG_PHONE)}</a>.
                 </p>
-                <p style="margin:24px 0 0; font-size:15px; color:#111111;">
+                <p style="margin:24px 0 18px; font-size:15px; color:#111111;">
                   Thanks for choosing <strong>Color Graphics</strong> &mdash; we'll see you soon!
                 </p>
-              </td>
-            </tr>
-            <tr>
-              <td style="background:#111111; padding:18px 32px; color:#CCCCCC; font-size:12px; line-height:1.5; text-align:center;">
-                Color Graphics &middot; ${escapeHtml(CG_ADDRESS)} &middot; ${escapeHtml(CG_PHONE)}
+
+                <div style="border-top:1px solid #E5E5E5; padding-top:16px; text-align:center; font-size:13px;">
+                  ${socialHtml}
+                </div>
               </td>
             </tr>
           </table>

@@ -288,6 +288,8 @@ function OutstandingStickerRow({
   const isReady = !!sticker.readyAt
   const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail.trim())
 
+  const [testStatus, setTestStatus] = useState<string | null>(null)
+
   async function markReady() {
     setBusy(true)
     setErr(null)
@@ -309,6 +311,31 @@ function OutstandingStickerRow({
       onDone()
     } finally {
       setBusy(false)
+    }
+  }
+
+  async function sendTest(reminder: boolean) {
+    if (!validEmail) return
+    setTestStatus('Sending…')
+    try {
+      const res = await fetch('/api/test-customer-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: customerEmail.trim(),
+          jobId,
+          customer: 'Preview Recipient',
+          reminder
+        })
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok || !body.ok) {
+        setTestStatus(`Test failed: ${body.reason ?? body.error ?? `HTTP ${res.status}`}`)
+        return
+      }
+      setTestStatus(`Test sent to ${body.to ?? customerEmail.trim()}`)
+    } catch (e) {
+      setTestStatus(`Test failed: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -383,6 +410,27 @@ function OutstandingStickerRow({
           {emailCustomer && !validEmail && (
             <span style={{ color: 'var(--red)', fontSize: 12 }}>Enter a valid email</span>
           )}
+        </div>
+      )}
+
+      {!isReady && emailCustomer && validEmail && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: 'var(--muted)', flexWrap: 'wrap' }}>
+          <span>Preview before launching:</span>
+          <button
+            type="button"
+            onClick={() => sendTest(false)}
+            style={{ padding: '4px 10px', fontSize: 12, border: '1px solid var(--line)', borderRadius: 6, background: '#fff', cursor: 'pointer' }}
+          >
+            Send test (initial)
+          </button>
+          <button
+            type="button"
+            onClick={() => sendTest(true)}
+            style={{ padding: '4px 10px', fontSize: 12, border: '1px solid var(--line)', borderRadius: 6, background: '#fff', cursor: 'pointer' }}
+          >
+            Send test (weekly reminder)
+          </button>
+          {testStatus && <span style={{ color: testStatus.startsWith('Test sent') ? '#1D7A3C' : 'var(--red)' }}>{testStatus}</span>}
         </div>
       )}
 
