@@ -7,6 +7,7 @@ import {
   mergePickupByKey
 } from '@/lib/pickup-store'
 import { sendCustomerReadyEmail } from '@/lib/email/smtp'
+import { getJob } from '@/lib/syncore/client'
 
 export const dynamic = 'force-dynamic'
 
@@ -53,11 +54,24 @@ export async function POST(req: Request) {
   for (const { key, record } of stickers) {
     if (!isDue(record, nowMs)) continue
 
+    // Live-pull the latest description/customer from Syncore so reminders
+    // reflect any post-print edits. Fall back to the stored snapshot if the
+    // Syncore call fails.
+    let liveCustomer = record.customer
+    let liveDescription = record.description
+    try {
+      const job = await getJob(record.jobId)
+      liveCustomer = job.customer || record.customer
+      liveDescription = job.description || record.description
+    } catch (err) {
+      console.warn(`[cron] Syncore lookup failed for job ${record.jobId}, using snapshot:`, err)
+    }
+
     const result = await sendCustomerReadyEmail({
       to: record.customerEmail!,
       jobId: record.jobId,
-      customer: record.customer,
-      description: record.description,
+      customer: liveCustomer,
+      description: liveDescription,
       readyAt: new Date(record.readyAt!),
       scanUrl: `${baseUrl}/scan/${record.token!}`,
       reminder: true

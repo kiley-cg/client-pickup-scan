@@ -69,10 +69,16 @@ export async function POST(req: Request) {
   let customerEmailResult: Awaited<ReturnType<typeof sendCustomerReadyEmail>> | null = null
   try {
     const job = await getJob(record.jobId)
+    // Prefer live Syncore values so any post-print edits (description rename,
+    // company name change, etc.) reach the recipient. Stored snapshot is only
+    // a fallback for the rare case Syncore returns an empty string.
+    const liveCustomer = job.customer || record.customer
+    const liveDescription = job.description || record.description
+
     staffEmail = await sendReadyEmail({
       jobId: record.jobId,
-      customer: record.customer || job.customer,
-      description: record.description || job.description,
+      customer: liveCustomer,
+      description: liveDescription,
       soNumbers: record.soNumbers,
       boxes: record.boxes,
       repName: job.repName,
@@ -87,8 +93,8 @@ export async function POST(req: Request) {
         customerEmailResult = await sendCustomerReadyEmail({
           to,
           jobId: record.jobId,
-          customer: record.customer || job.customer,
-          description: record.description || job.description,
+          customer: liveCustomer,
+          description: liveDescription,
           readyAt,
           scanUrl: `${baseUrl}/scan/${record.token}`,
           reminder: false
