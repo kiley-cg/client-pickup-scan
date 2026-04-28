@@ -176,6 +176,7 @@ export async function sendReadyEmail(input: ReadyEmailInput): Promise<{ sent: bo
 // ─── Customer-facing "your order is ready for pickup" email ────────────────
 
 const CG_ADDRESS = '2540 Crites St. SW, Tumwater, WA 98512'
+const CG_DIRECTIONS_URL = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent('2540 Crites St SW, Tumwater, WA 98512')}`
 const CG_PHONE = '(800) 456-8288'
 const CG_HOURS_WEEK_LABEL = 'Mon–Thu'
 const CG_HOURS_WEEK_VALUE = '8 AM – 5 PM'
@@ -203,6 +204,7 @@ export interface CustomerReadyEmailInput {
   to: string
   jobId: number
   customer: string
+  description: string     // human-readable order description (shown to customer)
   readyAt: Date
   scanUrl: string         // /scan/<token> — for the "I already picked it up" link
   reminder?: boolean      // false (default) for the first email, true for weekly follow-ups
@@ -250,12 +252,17 @@ export async function sendCustomerReadyEmail(input: CustomerReadyEmailInput): Pr
     ``,
     leadText,
     ``,
-    `Pickup area:`,
+    `Order: ${input.description || '(no description)'}`,
+    ``,
+    `Pickup Location:`,
     `  ${CG_ADDRESS}`,
+    `  Driving directions: ${CG_DIRECTIONS_URL}`,
     ``,
     `Hours:`,
     `  ${CG_HOURS_WEEK_LABEL}: ${CG_HOURS_WEEK_VALUE}`,
     `  ${CG_HOURS_FRI_LABEL}: ${CG_HOURS_FRI_VALUE}`,
+    ``,
+    `When you arrive, go to the marked self-pickup area. Use the labels on the boxes to find your order, then scan the QR code on the sticker to let us know it's been picked up.`,
     ``,
     `Already picked it up? Confirm here so we stop sending reminders:`,
     `  ${input.scanUrl}`,
@@ -293,8 +300,8 @@ export async function sendCustomerReadyEmail(input: CustomerReadyEmailInput): Pr
         <td align="center">
           <table role="presentation" width="560" cellspacing="0" cellpadding="0" border="0" style="background:#FFFFFF; border-radius:12px; overflow:hidden; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif; color:#111111;">
             <tr>
-              <td style="background:#E01B2B; padding:24px 32px;">
-                <img src="${logoUrl}" alt="Color Graphics" height="40" style="display:block; height:40px; width:auto; filter: brightness(0) invert(1);" />
+              <td style="background:#FFFFFF; padding:24px 32px; border-bottom:4px solid #E01B2B;">
+                <img src="${logoUrl}" alt="Color Graphics" height="44" style="display:block; height:44px; width:auto;" />
               </td>
             </tr>
             <tr>
@@ -310,8 +317,19 @@ export async function sendCustomerReadyEmail(input: CustomerReadyEmailInput): Pr
                 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#F7F7F7; border-radius:8px; padding:18px; margin:0 0 24px;">
                   <tr>
                     <td style="padding:0 0 14px;">
-                      <div style="font-size:11px; letter-spacing:1px; text-transform:uppercase; color:#666666; font-weight:600; margin:0 0 4px;">Pickup area</div>
-                      <div style="font-size:15px; color:#111111; font-weight:600;">${escapeHtml(CG_ADDRESS)}</div>
+                      <div style="font-size:11px; letter-spacing:1px; text-transform:uppercase; color:#666666; font-weight:600; margin:0 0 4px;">Order</div>
+                      <div style="font-size:15px; color:#111111;"><strong>Job #${input.jobId}</strong>${input.description ? ` &middot; ${escapeHtml(input.description)}` : ''}</div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:0 0 14px;">
+                      <div style="font-size:11px; letter-spacing:1px; text-transform:uppercase; color:#666666; font-weight:600; margin:0 0 4px;">Pickup Location</div>
+                      <div style="font-size:15px; color:#111111; font-weight:600;">
+                        <a href="${CG_DIRECTIONS_URL}" style="color:#111111; text-decoration:none;">${escapeHtml(CG_ADDRESS)}</a>
+                      </div>
+                      <div style="margin-top:4px;">
+                        <a href="${CG_DIRECTIONS_URL}" style="color:#E01B2B; text-decoration:none; font-size:13px; font-weight:600;">Get driving directions →</a>
+                      </div>
                     </td>
                   </tr>
                   <tr>
@@ -335,7 +353,7 @@ export async function sendCustomerReadyEmail(input: CustomerReadyEmailInput): Pr
                 </table>
 
                 <p style="margin:0 0 18px; font-size:14px; line-height:1.55; color:#333333;">
-                  When you arrive, just give us your name. There's also a sticker on your order with a QR code &mdash; scan it on your phone so we know it's been picked up.
+                  When you arrive, go to the marked self-pickup area. Use the labels on the boxes to find your order, then scan the QR code on the sticker to let us know it's been picked up.
                 </p>
 
                 <p style="margin:0 0 8px; font-size:14px; color:#666666;">

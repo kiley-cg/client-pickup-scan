@@ -8,6 +8,7 @@ const Body = z.object({
   to: z.string().email(),
   jobId: z.number().int().positive().optional(),
   customer: z.string().optional(),
+  description: z.string().optional(),
   reminder: z.boolean().optional().default(false)
 })
 
@@ -20,7 +21,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'bad body', details: parsed.error.format() }, { status: 400 })
   }
 
-  const { to, jobId = 99999, customer = 'Test Customer', reminder } = parsed.data
+  const {
+    to,
+    jobId = 99999,
+    customer = 'Test Customer',
+    description = 'Embroidered Polos × 24 — Sample Order',
+    reminder
+  } = parsed.data
 
   // Build a fake "ready since" timestamp so reminder copy reads naturally.
   const readyAt = reminder
@@ -34,6 +41,7 @@ export async function POST(req: Request) {
     to,
     jobId,
     customer,
+    description,
     readyAt,
     scanUrl,
     reminder

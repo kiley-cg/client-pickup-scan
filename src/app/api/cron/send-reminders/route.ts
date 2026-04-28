@@ -57,6 +57,7 @@ export async function POST(req: Request) {
       to: record.customerEmail!,
       jobId: record.jobId,
       customer: record.customer,
+      description: record.description,
       readyAt: new Date(record.readyAt!),
       scanUrl: `${baseUrl}/scan/${record.token!}`,
       reminder: true
