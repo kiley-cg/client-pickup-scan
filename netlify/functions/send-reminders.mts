@@ -3,7 +3,7 @@ import type { Config } from '@netlify/functions'
 /**
  * Scheduled function that triggers weekly customer-pickup reminders.
  *
- * Runs once a day at 16:00 UTC (~9 AM PT in summer, 8 AM PT in winter).
+ * Runs once a day at 15:00 UTC (= 8 AM PDT in summer, 7 AM PST in winter).
  * The actual reminder logic lives in the Next.js route at
  * /api/cron/send-reminders so it can use the same pickup-store / Syncore
  * / email helpers as the rest of the app. Each pending sticker decides
@@ -38,5 +38,5 @@ export default async () => {
 }
 
 export const config: Config = {
-  schedule: '0 16 * * *'
+  schedule: '0 15 * * *'
 }
