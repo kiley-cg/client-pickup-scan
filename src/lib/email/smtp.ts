@@ -239,12 +239,15 @@ export async function sendCustomerReadyEmail(input: CustomerReadyEmailInput): Pr
     ? `Friendly reminder — your order is still waiting`
     : `Your order is ready for pickup`
 
+  const descSnippet = input.description ? ` — <em>${escapeHtml(input.description)}</em>` : ''
+  const descSnippetText = input.description ? ` — ${input.description}` : ''
+
   const lead = isReminder
-    ? `Just a friendly reminder that your order (<strong>Job #${input.jobId}</strong>) has been ready in our self-pickup area since <strong>${escapeHtml(readyDayLabel)}</strong>${days ? ` (${days} day${days === 1 ? '' : 's'} ago)` : ''}. Come grab it whenever it's convenient.`
+    ? `Just a friendly reminder that your order (<strong>Job #${input.jobId}</strong>${descSnippet}) has been ready in our self-pickup area since <strong>${escapeHtml(readyDayLabel)}</strong>${days ? ` (${days} day${days === 1 ? '' : 's'} ago)` : ''}. Come grab it whenever it's convenient.`
     : `Your order (<strong>Job #${input.jobId}</strong>) is ready and waiting in our self-pickup area. Come grab it whenever it's convenient.`
 
   const leadText = isReminder
-    ? `Just a friendly reminder that your order (Job #${input.jobId}) has been ready in our self-pickup area since ${readyDayLabel}${days ? ` (${days} day${days === 1 ? '' : 's'} ago)` : ''}.`
+    ? `Just a friendly reminder that your order (Job #${input.jobId}${descSnippetText}) has been ready in our self-pickup area since ${readyDayLabel}${days ? ` (${days} day${days === 1 ? '' : 's'} ago)` : ''}.`
     : `Your order (Job #${input.jobId}) is ready for pickup at Color Graphics.`
 
   const text = [
@@ -264,9 +267,9 @@ export async function sendCustomerReadyEmail(input: CustomerReadyEmailInput): Pr
     ``,
     `When you arrive, go to the marked self-pickup area. Use the labels on the boxes to find your order, then scan the QR code on the sticker to let us know it's been picked up.`,
     ``,
-    `Already picked it up? Confirm here so we stop sending reminders:`,
-    `  ${input.scanUrl}`,
-    ``,
+    isReminder
+      ? `Already picked it up? Confirm here so we stop sending reminders:\n  ${input.scanUrl}\n`
+      : '',
     `Questions? Call ${CG_PHONE}.`,
     ``,
     `Thanks for choosing Color Graphics — we'll see you soon!`,
@@ -341,6 +344,7 @@ export async function sendCustomerReadyEmail(input: CustomerReadyEmailInput): Pr
                   </tr>
                 </table>
 
+                ${isReminder ? `
                 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 22px;">
                   <tr>
                     <td align="center">
@@ -351,6 +355,7 @@ export async function sendCustomerReadyEmail(input: CustomerReadyEmailInput): Pr
                     </td>
                   </tr>
                 </table>
+                ` : ''}
 
                 <p style="margin:0 0 18px; font-size:14px; line-height:1.55; color:#333333;">
                   When you arrive, go to the marked self-pickup area. Use the labels on the boxes to find your order, then scan the QR code on the sticker to let us know it's been picked up.
