@@ -281,6 +281,7 @@ function OutstandingStickerRow({
   onDone: () => void
 }) {
   const [busy, setBusy] = useState(false)
+  const [confirming, setConfirming] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [emailCustomer, setEmailCustomer] = useState(true)
   const [customerEmail, setCustomerEmail] = useState(clientEmail ?? '')
@@ -309,6 +310,23 @@ function OutstandingStickerRow({
       onDone()
     } finally {
       setBusy(false)
+    }
+  }
+
+  async function markPickedUp() {
+    if (!confirm(`Mark job #${jobId} (${sos}) as picked up?\n\nThis will post a red entry to the Syncore Job Tracker, email csr@colorgraphicswa.com, and stop any further reminders to the customer.`)) return
+    setConfirming(true)
+    setErr(null)
+    try {
+      const res = await fetch(`/api/pickups/${encodeURIComponent(sticker.key)}/confirm`, { method: 'POST' })
+      if (!res.ok) {
+        const body = await res.text().catch(() => '')
+        setErr(`Failed (${res.status}) ${body.slice(0, 160)}`)
+        return
+      }
+      onDone()
+    } finally {
+      setConfirming(false)
     }
   }
 
@@ -341,16 +359,26 @@ function OutstandingStickerRow({
             <span style={{ color: 'var(--muted)' }}>Not yet marked ready</span>
           )}
         </div>
-        {!isReady && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {!isReady && (
+            <button
+              className="btn-primary"
+              onClick={markReady}
+              disabled={busy || confirming || (emailCustomer && !validEmail)}
+              style={{ padding: '8px 16px', fontSize: 13 }}
+            >
+              {busy ? 'Posting…' : 'Mark ready for pickup'}
+            </button>
+          )}
           <button
-            className="btn-primary"
-            onClick={markReady}
-            disabled={busy || (emailCustomer && !validEmail)}
-            style={{ padding: '8px 16px', fontSize: 13 }}
+            type="button"
+            onClick={markPickedUp}
+            disabled={busy || confirming}
+            style={{ padding: '8px 16px', fontSize: 13, background: '#111', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}
           >
-            {busy ? 'Posting…' : 'Mark ready for pickup'}
+            {confirming ? 'Marking…' : 'Mark picked up'}
           </button>
-        )}
+        </div>
       </div>
 
       {!isReady && (

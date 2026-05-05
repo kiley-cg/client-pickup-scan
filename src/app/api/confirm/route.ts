@@ -1,30 +1,9 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { verifyToken, tokenKey } from '@/lib/token/hmac'
-import { getJob } from '@/lib/syncore/client'
-import { addTrackerEntry } from '@/lib/syncore/webui'
-import {
-  getPickupByKey,
-  mergePickupByKey,
-  recordPickupByKey,
-  recordSalesOrderPickup
-} from '@/lib/pickup-store'
-import { sendPickupEmail } from '@/lib/email/smtp'
+import { performPickup } from '@/lib/pickup-flow'
 
 const Body = z.object({ token: z.string().min(1) })
-
-function formatWhen(d: Date): string {
-  return d.toLocaleString('en-US', {
-    timeZone: 'America/Los_Angeles',
-    dateStyle: 'medium',
-    timeStyle: 'short'
-  })
-}
-
-function formatSOs(jobId: number, soNumbers: number[]): string {
-  const list = [...soNumbers].sort((a, b) => a - b).map(n => `${jobId}-${n}`).join(', ')
-  return soNumbers.length === 1 ? `Sales Order ${list}` : `Sales Orders ${list}`
-}
 
 export async function POST(req: Request) {
   const parsed = Body.safeParse(await req.json().catch(() => ({})))
@@ -41,56 +20,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: 'invalid or expired token' }, { status: 401 })
   }
 
-  const blobKey = tokenKey(token)
-
   try {
-    const existing = await getPickupByKey(blobKey)
-    if (existing?.pickedUpAt) {
-      return NextResponse.json({ ok: true, alreadyPickedUp: true, at: existing.pickedUpAt })
-    }
-
-    const job = await getJob(jobId)
-    const pickedUpAt = new Date()
-    const pickedUpAtIso = pickedUpAt.toISOString()
-    const description = `Picked up by customer on ${formatWhen(pickedUpAt)} — ${formatSOs(jobId, soNumbers)}`
-
-    await addTrackerEntry(jobId, description, { textColor: 1 })
-
-    if (existing) {
-      await mergePickupByKey(blobKey, { pickedUpAt: pickedUpAtIso })
-    } else {
-      // No sticker record — write a minimal one (token was signed out-of-band)
-      await recordPickupByKey(blobKey, {
-        jobId,
-        soNumbers,
-        boxes: 1,
-        customer: job.customer,
-        description: job.description,
-        printedAt: pickedUpAtIso,
-        readyAt: null,
-        pickedUpAt: pickedUpAtIso
-      })
-    }
-
-    await Promise.all(
-      soNumbers.map(soNumber =>
-        recordSalesOrderPickup({ jobId, soNumber, pickedUpAt: pickedUpAtIso, stickerKey: blobKey })
-      )
-    )
-
-    const emailResult = await sendPickupEmail({
+    const result = await performPickup({
+      blobKey: tokenKey(token),
       jobId,
-      customer: job.customer,
-      description: job.description,
       soNumbers,
-      pickedUpAt
+      manual: false
     })
-
     return NextResponse.json({
       ok: true,
-      alreadyPickedUp: false,
-      at: pickedUpAtIso,
-      email: emailResult
+      alreadyPickedUp: result.alreadyPickedUp,
+      at: result.at,
+      email: result.email
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)

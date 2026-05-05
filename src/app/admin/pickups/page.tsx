@@ -48,7 +48,7 @@ export default async function AdminPickupsPage() {
         </div>
       ) : (
         <div style={{ background: '#fff', border: '1px solid var(--line)', borderRadius: 16, overflow: 'hidden' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '80px 1.4fr 1.2fr 60px 110px 140px 140px 110px', gap: 12, padding: '12px 20px', background: 'var(--paper)', fontSize: 12, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '80px 1.4fr 1.2fr 60px 110px 140px 140px 140px', gap: 12, padding: '12px 20px', background: 'var(--paper)', fontSize: 12, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600 }}>
             <div>Job</div>
             <div>Customer</div>
             <div>Sales Orders</div>
