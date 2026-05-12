@@ -1,18 +1,69 @@
-import nodemailer from 'nodemailer'
+import { Resend } from 'resend'
 import { env, lookupRepEmail } from '@/lib/env'
 
-let cachedTransporter: nodemailer.Transporter | null = null
+/**
+ * Email sending via Resend (https://resend.com).
+ *
+ * Replaces the legacy Gmail-SMTP/nodemailer path. Resend handles
+ * deliverability, domain auth (SPF/DKIM), bounce tracking, and
+ * dashboard analytics. All three send functions in this file share
+ * one Resend client; the per-call from/replyTo come from env vars.
+ */
 
-function transporter() {
-  if (cachedTransporter) return cachedTransporter
-  cachedTransporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: env().GMAIL_USER,
-      pass: env().GMAIL_APP_PASSWORD
+let cachedClient: Resend | null = null
+
+function client(): Resend | null {
+  const key = env().RESEND_API_KEY
+  if (!key) return null
+  if (cachedClient) return cachedClient
+  cachedClient = new Resend(key)
+  return cachedClient
+}
+
+function fromAddress(): string {
+  return env().EMAIL_FROM
+}
+
+function replyToAddress(): string {
+  return env().EMAIL_REPLY_TO
+}
+
+interface SendArgs {
+  to: string | string[]
+  subject: string
+  text: string
+  html: string
+}
+
+interface SendResult {
+  sent: boolean
+  id?: string
+  reason?: string
+}
+
+async function sendViaResend(args: SendArgs): Promise<SendResult> {
+  const c = client()
+  if (!c) {
+    return { sent: false, reason: 'RESEND_API_KEY not configured — skipping email.' }
+  }
+  try {
+    const { data, error } = await c.emails.send({
+      from: fromAddress(),
+      to: Array.isArray(args.to) ? args.to : [args.to],
+      replyTo: replyToAddress(),
+      subject: args.subject,
+      text: args.text,
+      html: args.html
+    })
+    if (error) {
+      console.error('[resend] send failed:', error)
+      return { sent: false, reason: error.message ?? JSON.stringify(error) }
     }
-  })
-  return cachedTransporter
+    return { sent: true, id: data?.id }
+  } catch (err) {
+    console.error('[resend] send threw:', err)
+    return { sent: false, reason: err instanceof Error ? err.message : String(err) }
+  }
 }
 
 export interface PickupEmailInput {
@@ -24,9 +75,6 @@ export interface PickupEmailInput {
 }
 
 export async function sendPickupEmail(input: PickupEmailInput): Promise<{ sent: boolean; to: string | null; reason?: string }> {
-  if (!env().GMAIL_APP_PASSWORD) {
-    return { sent: false, to: null, reason: 'GMAIL_APP_PASSWORD not configured — skipping email.' }
-  }
   const to = env().PICKUP_EMAIL_TO.trim()
   if (!to) {
     return { sent: false, to: null, reason: 'PICKUP_EMAIL_TO not configured.' }
@@ -67,20 +115,8 @@ export async function sendPickupEmail(input: PickupEmailInput): Promise<{ sent: 
     </div>
   `.trim()
 
-  try {
-    await transporter().sendMail({
-      from: env().GMAIL_USER,
-      to,
-      replyTo: env().GMAIL_USER,
-      subject,
-      text,
-      html
-    })
-    return { sent: true, to }
-  } catch (err) {
-    console.error('[pickup-email] send failed:', err)
-    return { sent: false, to, reason: err instanceof Error ? err.message : String(err) }
-  }
+  const result = await sendViaResend({ to, subject, text, html })
+  return { sent: result.sent, to, reason: result.reason }
 }
 
 export interface ReadyEmailInput {
@@ -95,10 +131,6 @@ export interface ReadyEmailInput {
 }
 
 export async function sendReadyEmail(input: ReadyEmailInput): Promise<{ sent: boolean; to: string[]; missing: string[]; reason?: string }> {
-  if (!env().GMAIL_APP_PASSWORD) {
-    return { sent: false, to: [], missing: [], reason: 'GMAIL_APP_PASSWORD not configured — skipping email.' }
-  }
-
   const to: string[] = []
   const missing: string[] = []
   for (const name of [input.repName, input.csrName]) {
@@ -157,20 +189,8 @@ export async function sendReadyEmail(input: ReadyEmailInput): Promise<{ sent: bo
     </div>
   `.trim()
 
-  try {
-    await transporter().sendMail({
-      from: env().GMAIL_USER,
-      to: to.join(', '),
-      replyTo: env().GMAIL_USER,
-      subject,
-      text,
-      html
-    })
-    return { sent: true, to, missing }
-  } catch (err) {
-    console.error('[ready-email] send failed:', err)
-    return { sent: false, to, missing, reason: err instanceof Error ? err.message : String(err) }
-  }
+  const result = await sendViaResend({ to, subject, text, html })
+  return { sent: result.sent, to, missing, reason: result.reason }
 }
 
 // ─── Customer-facing "your order is ready for pickup" email ────────────────
@@ -215,9 +235,6 @@ function isLikelyEmail(s: string): boolean {
 }
 
 export async function sendCustomerReadyEmail(input: CustomerReadyEmailInput): Promise<{ sent: boolean; to: string | null; reason?: string }> {
-  if (!env().GMAIL_APP_PASSWORD) {
-    return { sent: false, to: null, reason: 'GMAIL_APP_PASSWORD not configured — skipping email.' }
-  }
   const to = input.to.trim()
   if (!to) {
     return { sent: false, to: null, reason: 'No customer email on file.' }
@@ -381,20 +398,8 @@ export async function sendCustomerReadyEmail(input: CustomerReadyEmailInput): Pr
 </html>
   `.trim()
 
-  try {
-    await transporter().sendMail({
-      from: `Color Graphics <${env().GMAIL_USER}>`,
-      to,
-      replyTo: env().GMAIL_USER,
-      subject,
-      text,
-      html
-    })
-    return { sent: true, to }
-  } catch (err) {
-    console.error('[customer-ready-email] send failed:', err)
-    return { sent: false, to, reason: err instanceof Error ? err.message : String(err) }
-  }
+  const result = await sendViaResend({ to, subject, text, html })
+  return { sent: result.sent, to, reason: result.reason }
 }
 
 function escapeHtml(s: string): string {

@@ -5,8 +5,15 @@ const EnvSchema = z.object({
   SYNCORE_USERNAME: z.string().optional().default(''),
   SYNCORE_PASSWORD: z.string().optional().default(''),
   PICKUP_HMAC_SECRET: z.string().min(16),
-  GMAIL_USER: z.string().email(),
+  // Legacy Gmail-SMTP creds — kept for one release while we cut over to Resend.
+  // Safe to remove once /api/* are confirmed on Resend in production.
+  GMAIL_USER: z.string().email().optional().default('alerts@updates.colorgraphicswa.com'),
   GMAIL_APP_PASSWORD: z.string().optional().default(''),
+
+  // Resend.com is the live email sender.
+  RESEND_API_KEY: z.string().optional().default(''),
+  EMAIL_FROM: z.string().optional().default('Color Graphics <alerts@updates.colorgraphicswa.com>'),
+  EMAIL_REPLY_TO: z.string().optional().default('alerts@colorgraphicswa.com'),
   PUBLIC_BASE_URL: z.string().url(),
   ADMIN_PASSWORD: z.string().min(1),
   PICKUP_EMAIL_TO: z.string().optional().default(''),
